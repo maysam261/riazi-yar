@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+  </defs>
+
+  <!-- کل پس‌زمینه پر می‌شود (اجباری برای maskable) -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+
+  <!-- محتوا در مرکز، با حاشیه‌ی امن -->
+  <!-- مثلث -->
+  <polygon points="256,150 130,362 382,362"
+           fill="none" stroke="#ffffff" stroke-width="20"
+           stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- دایره -->
+  <circle cx="256" cy="290" r="42" fill="#fbbf24"/>
+  <circle cx="256" cy="290" r="42" fill="none" stroke="#ffffff" stroke-width="7"/>
+
+  <!-- خط کسری -->
+  <line x1="200" y1="406" x2="312" y2="406"
+        stroke="#ffffff" stroke-width="14" stroke-linecap="round"/>
+</svg>
