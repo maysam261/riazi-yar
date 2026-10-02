@@ -3,12 +3,6 @@
 
 بازی آموزشی تعاملی ریاضی برای دانش‌آموزان پایه‌های ۴ تا ۹
 آموزش، تمرین و آزمون محیط، مساحت، حجم، کسرها و اعداد اعشاری
-
-https://img.shields.io/badge/PWA-نصب‌شدنی-7c3aed
-https://img.shields.io/badge/آفلاین-کار%20می‌کند-10b981
-https://img.shields.io/badge/زبان-فارسی-f59e0b
-https://img.shields.io/badge/نسخه-5.2-blue
-
 ---
 
 🎬 شروع سریع
