@@ -1,5 +1,5 @@
 /* =============================================================
-   ریاضی‌یار — نسخه ۴.۱ (دیباگ‌شده)
+   ریاضی‌یار — نسخه ۵.۲ (اصلاح باگ‌ها)
    ============================================================= */
 (function () {
 'use strict';
@@ -12,7 +12,7 @@ const STORAGE_KEY = 'riazi-yar-v1';
 const defaultState = {
   settings: {
     sound: true, animation: true, persianNumbers: true,
-    difficulty: 'medium', questionCount: 10, examTime: 300,
+    difficulty: 'easy', questionCount: 10, examTime: 300,
     negativeMark: false
   },
   activeStudentId: null,
@@ -28,27 +28,6 @@ function loadState() {
     const saved = JSON.parse(raw);
     const merged = mergeDeep(deepClone(defaultState), saved);
     if (!Array.isArray(merged.students)) merged.students = [];
-    if (merged.stats && !merged.students.length) {
-      const id = 'stu_' + Date.now();
-      merged.students.push({
-        id, name: 'دانش‌آموز', family: '',
-        grade: 6, createdAt: Date.now(),
-        stats: merged.stats,
-        progress: merged.progress || {
-          perimeter: { attempts: 0, correct: 0 },
-          area: { attempts: 0, correct: 0 },
-          fractions: { attempts: 0, correct: 0 },
-          decimals: { attempts: 0, correct: 0 }
-        },
-        history: merged.history || [],
-        mistakes: merged.mistakes || {}
-      });
-      merged.activeStudentId = id;
-      delete merged.stats;
-      delete merged.progress;
-      delete merged.history;
-      delete merged.mistakes;
-    }
     return merged;
   } catch (e) {
     console.warn('خطا در بارگذاری', e);
@@ -87,6 +66,7 @@ function newStudentTemplate(name, family, grade) {
     progress: {
       perimeter: { attempts: 0, correct: 0 },
       area: { attempts: 0, correct: 0 },
+      volume: { attempts: 0, correct: 0 },
       fractions: { attempts: 0, correct: 0 },
       decimals: { attempts: 0, correct: 0 }
     },
@@ -135,6 +115,7 @@ function escHtml(s) {
 function faSafe(n) { return escHtml(fa(n)); }
 function eq(html) { return `<span class="eq">${html}</span>`; }
 function pct(unit) { return unit ? ' ' + unit : ''; }
+function numOr(v, fallback) { return typeof v === 'number' && v > 0 ? v : fallback; }
 
 /* ============================================================
    ۳) SOUND
@@ -175,11 +156,22 @@ function fracSub(a, b) { return simplify(a.n * b.d - b.n * a.d, a.d * b.d); }
 function fracMul(a, b) { return simplify(a.n * b.n, a.d * b.d); }
 function fracDiv(a, b) { return simplify(a.n * b.d, a.d * b.n); }
 function fracVal(f) { return f.n / f.d; }
+
 function fracHTML(f) {
   if (!f || f.d == null || f.n == null) return '';
   const s = simplify(f.n, f.d);
   if (s.d === 1) return `<span class="frac-int">${fa(s.n)}</span>`;
   return `<span class="frac"><span class="num">${fa(s.n)}</span><span class="den">${fa(s.d)}</span></span>`;
+}
+function mixedHTML(f) {
+  const s = simplify(f.n, f.d);
+  if (s.d === 1) return fa(s.n);
+  const sign = s.n < 0 ? '−' : '';
+  const abs = Math.abs(s.n);
+  const whole = Math.floor(abs / s.d);
+  const rem = abs % s.d;
+  if (whole === 0) return `${sign}${fracHTML({ n: rem, d: s.d })}`;
+  return `${sign}<span class="mixed">${fa(whole)}${fracHTML({ n: rem, d: s.d })}</span>`;
 }
 function displayAnswer(a) {
   if (a == null) return '';
@@ -193,7 +185,10 @@ function displayAnswer(a) {
 /* ============================================================
    ۵) SHAPES
    ============================================================ */
-const SC = { fill: '#c7d2fe', stroke: '#4338ca', fill2: '#a5b4fc', fill3: '#fde68a', accent: '#fbbf24' };
+const SC = {
+  fill: '#c7d2fe', stroke: '#4338ca', fill2: '#a5b4fc',
+  fill3: '#fde68a', fill4: '#bbf7d0', accent: '#fbbf24'
+};
 
 function svgWrap(w, h, inner) {
   return `<svg viewBox="0 0 ${w} ${h}" class="shape-svg" role="img" aria-hidden="true">${inner}</svg>`;
@@ -201,7 +196,6 @@ function svgWrap(w, h, inner) {
 function label(x, y, txt, anchor = 'middle', cls = 'svg-label') {
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}" direction="rtl">${txt}</text>`;
 }
-
 function fitPoints(points, W, H, pad) {
   const xs = points.map(p => p[0]);
   const ys = points.map(p => p[1]);
@@ -226,7 +220,6 @@ function labelOnSegment(P1, P2, centroid, txt, offset = 16) {
   dx /= len; dy /= len;
   return label(mx + dx * offset, my + dy * offset + 4, txt);
 }
-/* ✅ FIXED: امن‌سازی برای مثلث نامعتبر */
 function triangleFromSides(a, b, c) {
   const x = (c * c - b * b + a * a) / (2 * a);
   const ySq = c * c - x * x;
@@ -238,8 +231,6 @@ function mathToSvg(points, W, H, pad) {
   const flipped = points.map(p => [p[0], maxY - p[1]]);
   return fitPoints(flipped, W, H, pad);
 }
-/* ✅ FIXED: مدیریت مقادیر غیرعددی */
-function numOr(v, fallback) { return typeof v === 'number' && v > 0 ? v : fallback; }
 
 const Shapes = {
   square(side) {
@@ -413,11 +404,14 @@ const Shapes = {
       W, H, pad
     );
     const [pBL, pBR, pR, pTop, pL] = pts;
+    const roofBaseMid = [(pL[0] + pR[0]) / 2, pL[1]];
     return svgWrap(W, H,
-      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3" stroke-linejoin="round"/>` +
-      label((pBL[0] + pBR[0]) / 2, pBL[1] + 22, fa(w), 'middle', 'svg-label-lg') +
-      label(pR[0] + 10, (pR[1] + pBR[1]) / 2 + 4, fa(h), 'start', 'svg-label-lg') +
-      label(pTop[0], pTop[1] - 8, fa(roofH), 'middle', 'svg-label-lg')
+      `<polygon points="${pBL.join(',')} ${pBR.join(',')} ${pR.join(',')} ${pL.join(',')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3" stroke-linejoin="round"/>` +
+      `<polygon points="${pL.join(',')} ${pTop.join(',')} ${pR.join(',')}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="3" stroke-linejoin="round"/>` +
+      `<line x1="${pTop[0]}" y1="${pTop[1]}" x2="${roofBaseMid[0]}" y2="${roofBaseMid[1]}" stroke="${SC.accent}" stroke-width="2.2" stroke-dasharray="5 4"/>` +
+      label(pTop[0] + 12, (pTop[1] + roofBaseMid[1]) / 2 + 4, fa(roofH), 'start', 'svg-label-lg') +
+      label((pBL[0] + pBR[0]) / 2, pBL[1] + 22, fa(wN), 'middle', 'svg-label-lg') +
+      label(pR[0] + 10, (pR[1] + pBR[1]) / 2 + 4, fa(hN), 'start', 'svg-label-lg')
     );
   },
   tshape(WT, HT, WB, HB) {
@@ -455,76 +449,145 @@ const Shapes = {
       else paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${fill}" stroke="#4338ca" stroke-width="1.5"/>`;
     }
     return svgWrap(W, H, paths);
+  },
+  cube(edge) {
+    const W = 240, H = 220, pad = 40;
+    const size = 100, offset = 30;
+    const x0 = pad + offset, y0 = pad + offset;
+    return svgWrap(W, H,
+      `<polygon points="${x0},${y0} ${x0 + size},${y0} ${x0 + size},${y0 + size} ${x0},${y0 + size}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      `<polygon points="${x0 - offset},${y0 - offset} ${x0 + size - offset},${y0 - offset} ${x0 + size - offset},${y0 + size - offset} ${x0 - offset},${y0 + size - offset}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      `<line x1="${x0 - offset}" y1="${y0 - offset}" x2="${x0}" y2="${y0}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
+      `<line x1="${x0 + size - offset}" y1="${y0 - offset}" x2="${x0 + size}" y2="${y0}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
+      `<line x1="${x0 - offset}" y1="${y0 + size - offset}" x2="${x0}" y2="${y0 + size}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
+      `<line x1="${x0 + size - offset}" y1="${y0 + size - offset}" x2="${x0 + size}" y2="${y0 + size}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
+      label(x0 + size / 2 - offset / 2, y0 + size - offset + 22, fa(edge), 'middle', 'svg-label-lg')
+    );
+  },
+  /* ✅ FIXED: برچسب‌های مکعب مستطیل حالا با ابعاد واقعی همخوان هستند */
+  box(length, width, height) {
+    const W = 260, H = 220, pad = 40;
+    const maxDim = Math.max(length, width, height);
+    const scale = 90 / maxDim;
+    // A = ضلع افقی جلو = طول
+    // B = ضلع عمودی جلو = ارتفاع
+    // C = ضلع مایل (عمق) = عرض
+    const A = length * scale;
+    const B = height * scale;
+    const C = width * scale;
+    const offset = 25;
+    const x0 = pad + offset, y0 = pad + offset;
+    return svgWrap(W, H,
+      // وجه جلو: طول × ارتفاع
+      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" rx="3"/>` +
+      // وجه بالا: مایل به عرض
+      `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset},${y0 - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      // وجه راست: ارتفاع × عرض
+      `<polygon points="${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 + A - offset},${y0 + B - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      // برچسب پایین: طول
+      label(x0 - offset + A / 2, y0 - offset + B + 22, fa(length), 'middle', 'svg-label-lg') +
+      // برچسب چپ: ارتفاع
+      label(x0 - offset - 12, y0 - offset + B / 2 + 4, fa(height), 'end', 'svg-label-lg') +
+      // برچسب مایل: عرض
+      label(x0 + A - offset + C / 2 + 8, y0 - offset - C * 0.3 - 4, fa(width), 'start', 'svg-label-lg')
+    );
   }
 };
 
 /* ============================================================
-   ۶) CONTEXTS + DIFFICULTY
+   ۶) DIFFICULTY
    ============================================================ */
 function diffRange(diff) {
-  if (diff === 'easy') return [2, 9];
-  if (diff === 'hard') return [5, 25];
-  return [3, 15];
+  if (diff === 'easy') return [2, 6];
+  if (diff === 'hard') return [6, 12];
+  return [4, 9];
 }
 
+/* ============================================================
+   ۷) CONTEXTS
+   ============================================================ */
 const CTX_P = {
   square: [
-    { story: 'قاب عکس مربعی به ضلع', u: 'سانتی‌متر', ask: 'برای قاب‌گیری دور آن چقدر چوب لازم است؟' },
-    { story: 'زمین بازی مربعی به ضلع', u: 'متر', ask: 'اگر یک دور کامل دور آن بدویم، چند متر دویده‌ایم؟' },
-    { story: 'سفره مربعی به ضلع', u: 'سانتی‌متر', ask: 'برای دوخت نوار دور آن چقدر نوار لازم است؟' },
-    { story: 'باغچه مربعی به ضلع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' }
+    { story: 'یک کاشی مربعی داریم که هر ضلعش', u: 'سانتی‌متر', ask: 'دور تا دور این کاشی چند سانتی‌متر است؟' },
+    { story: 'زمین بازی مدرسه مربعی است و هر ضلعش', u: 'متر', ask: 'اگر یک دور کامل دور زمین بدویم، چند متر می‌دویم؟' },
+    { story: 'سفره‌ی مربعی داریم که هر ضلعش', u: 'سانتی‌متر', ask: 'برای دوخت نوار دور سفره چقدر نوار لازم است؟' },
+    { story: 'یک باغچه‌ی مربعی داریم که هر ضلعش', u: 'متر', ask: 'برای نرده‌کشی دور باغچه چقدر نرده لازم است؟' },
+    { story: 'قاب عکس مربعی داریم که هر ضلعش', u: 'سانتی‌متر', ask: 'برای قاب‌گیری دور آن چقدر چوب لازم است؟' }
   ],
   rectangle: [
-    { story: 'استخر مستطیلی به طول', u: 'متر', ask: 'برای نصب حفاظ دور آن چقدر حفاظ لازم است؟' },
-    { story: 'باغچه مستطیلی به طول', u: 'متر', ask: 'برای کشیدن سیم دور آن چقدر سیم لازم است؟' },
-    { story: 'قاب مستطیلی به طول', u: 'سانتی‌متر', ask: 'برای قاب‌گیری آن چقدر نوار لازم است؟' },
-    { story: 'زمین فوتبال به طول', u: 'متر', ask: 'اگر بازیکن دو دور کامل دور آن بدود، چند متر دویده است؟' }
+    { story: 'استخر مستطیلی داریم به طول', u: 'متر', ask: 'برای نصب حفاظ دور آن چقدر حفاظ لازم است؟' },
+    { story: 'جلد کتاب ریاضی ما مستطیلی است به طول', u: 'سانتی‌متر', ask: 'دور تا دور جلد کتاب چند سانتی‌متر است؟' },
+    { story: 'یک زمین فوتبال مستطیلی داریم به طول', u: 'متر', ask: 'دور تا دور زمین چند متر است؟' },
+    { story: 'فرش اتاق ما مستطیلی است به طول', u: 'متر', ask: 'برای دوخت نوار دور فرش چقدر نوار لازم است؟' }
   ],
   triangle: [
-    { story: 'زمین مثلثی با اضلاع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' },
-    { story: 'تابلوی هشدار مثلثی با اضلاع', u: 'سانتی‌متر', ask: 'برای قاب‌گیری آن چقدر نوار لازم است؟' }
+    { story: 'یک زمین مثلثی داریم با اضلاع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' },
+    { story: 'تابلوی هشدار مدرسه مثلثی است با اضلاع', u: 'سانتی‌متر', ask: 'برای قاب‌گیری آن چقدر نوار لازم است؟' },
+    { story: 'یک قطعه زمین مثلثی داریم با اضلاع', u: 'متر', ask: 'دور تا دور آن چند متر است؟' }
   ],
   circle: [
-    { story: 'استخر دایره‌ای به شعاع', u: 'متر', ask: 'برای کشیدن نرده دور آن چقدر نرده لازم است؟ (π ≈ ۳٫۱۴)' },
-    { story: 'باغ گل دایره‌ای به شعاع', u: 'متر', ask: 'برای دور آن چقدر نوار لازم است؟ (π ≈ ۳٫۱۴)' }
+    { story: 'استخر دایره‌ای داریم با شعاع', u: 'متر', ask: 'برای کشیدن نرده دور آن چقدر نرده لازم است؟ (π را ۳٫۱۴ بگیر)' },
+    { story: 'یک باغ گل دایره‌ای داریم با شعاع', u: 'متر', ask: 'دور تا دور آن چند متر است؟ (π را ۳٫۱۴ بگیر)' }
   ],
   parallelogram: [
-    { story: 'زمین کشاورزی متوازی‌الاضلاع با اضلاع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' }
+    { story: 'یک زمین کشاورزی متوازی‌الاضلاع داریم با اضلاع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' }
   ],
   rhombus: [
-    { story: 'باغچه لوزی‌شکل به ضلع', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' }
+    { story: 'باغچه‌ای لوزی‌شکل داریم که هر ضلعش', u: 'متر', ask: 'برای نرده‌کشی دور آن چقدر نرده لازم است؟' }
   ]
 };
+
 const CTX_A = {
   square: [
-    { story: 'زمین کشاورزی مربعی به ضلع', u: 'متر', ask: 'مساحت آن چقدر است؟' },
-    { story: 'کاشی مربعی به ضلع', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟' },
-    { story: 'آشپزخانه مربعی به ضلع', u: 'متر', ask: 'برای سنگ‌فرش آن چند متر مربع سنگ لازم است؟' }
+    { story: 'اتاق بازی به شکل مربع است و ضلعش', u: 'متر', ask: 'مساحت آن چقدر است؟' },
+    { story: 'یک کاشی مربعی داریم که ضلعش', u: 'سانتی‌متر', ask: 'مساحت این کاشی چقدر است؟' },
+    { story: 'آشپزخانه‌ی ما مربعی است و ضلعش', u: 'متر', ask: 'برای سنگ‌فرش کف آن چند متر مربع سنگ لازم است؟' }
   ],
   rectangle: [
-    { story: 'زمین فوتبال به طول', u: 'متر', ask: 'مساحت آن چقدر است؟' },
-    { story: 'جلد کتاب به طول', u: 'سانتی‌متر', ask: 'مساحت جلد آن چقدر است؟' },
-    { story: 'زمین کشاورزی به طول', u: 'متر', ask: 'مساحت آن چقدر است؟' },
-    { story: 'فرش مستطیلی به طول', u: 'متر', ask: 'مساحت آن چقدر است؟' }
+    { story: 'زمین فوتبال محله‌ی ما به طول', u: 'متر', ask: 'مساحت آن چقدر است؟' },
+    { story: 'جلد دفتر مشق من به طول', u: 'سانتی‌متر', ask: 'مساحت جلد دفتر چقدر است؟' },
+    { story: 'یک زمین کشاورزی به طول', u: 'متر', ask: 'مساحت آن چقدر است؟' },
+    { story: 'پوستر اتاق من به طول', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟' }
   ],
   triangle: [
-    { story: 'زمین مثلثی با قاعده', u: 'متر', ask: 'مساحت آن چقدر است؟' },
-    { story: 'تابلوی مثلثی با قاعده', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟' }
+    { story: 'بیرق مثلثی مدرسه با قاعده', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟' },
+    { story: 'یک تکه زمین مثلثی با قاعده', u: 'متر', ask: 'مساحت آن چقدر است؟' }
   ],
   circle: [
-    { story: 'پیتزای دایره‌ای به شعاع', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟ (π ≈ ۳٫۱۴)' },
-    { story: 'استخر دایره‌ای به شعاع', u: 'متر', ask: 'مساحت کف آن چقدر است؟ (π ≈ ۳٫۱۴)' }
+    { story: 'پیتزای دایره‌ای داریم با شعاع', u: 'سانتی‌متر', ask: 'مساحت آن چقدر است؟ (π را ۳٫۱۴ بگیر)' },
+    { story: 'استخر دایره‌ای محله با شعاع', u: 'متر', ask: 'مساحت کف آن چقدر است؟ (π را ۳٫۱۴ بگیر)' }
+  ],
+  parallelogram: [
+    { story: 'زمین کشاورزی متوازی‌الاضلاع با قاعده', u: 'متر', ask: 'مساحت آن چقدر است؟' }
+  ],
+  rhombus: [
+    { story: 'باغچه‌ی لوزی‌شکل با قطرهای', u: 'متر', ask: 'مساحت آن چقدر است؟' }
   ]
 };
+
+const CTX_V = {
+  cube: [
+    { story: 'یک جعبه‌ی مکعبی داریم که هر ضلعش', u: 'سانتی‌متر', ask: 'حجم آن چقدر است؟' },
+    { story: 'یک تاس بازی مکعبی است و هر ضلعش', u: 'سانتی‌متر', ask: 'حجم این تاس چقدر است؟' },
+    { story: 'یک آجر اسباب‌بازی مکعبی است و هر ضلعش', u: 'سانتی‌متر', ask: 'حجم آن چقدر است؟' }
+  ],
+  box: [
+    { story: 'یک جعبه کفش داریم به طول', u: 'سانتی‌متر', ask: 'حجم آن چقدر است؟' },
+    { story: 'یخچال خانه‌ی ما به طول', u: 'سانتی‌متر', ask: 'حجم فضای داخل آن چقدر است؟' },
+    { story: 'یک کتابخانه‌ی چوبی داریم به طول', u: 'سانتی‌متر', ask: 'حجم آن چقدر است؟' }
+  ]
+};
+
 const CTX_FR = [
-  { name: 'علی', u: 'تومان', verb: 'خرج کرد', q: 'چقدر خرج کرد؟' },
-  { name: 'مریم', u: 'صفحه', verb: 'خواند', q: 'چند صفحه خواند؟' },
-  { name: 'رضا', u: 'لیتر', verb: 'نوشید', q: 'چند لیتر نوشید؟' },
-  { name: 'زهرا', u: 'دقیقه', verb: 'ورزش کرد', q: 'چند دقیقه ورزش کرد؟' }
+  { name: 'علی', u: 'تومان', verb: 'خرج کرد', q: 'علی چقدر خرج کرد؟' },
+  { name: 'مریم', u: 'صفحه', verb: 'خواند', q: 'مریم چند صفحه خواند؟' },
+  { name: 'رضا', u: 'لیتر', verb: 'نوشید', q: 'رضا چند لیتر نوشید؟' },
+  { name: 'زهرا', u: 'دقیقه', verb: 'ورزش کرد', q: 'زهرا چند دقیقه ورزش کرد؟' },
+  { name: 'حسین', u: 'تومان', verb: 'پس‌انداز کرد', q: 'حسین چقدر پس‌انداز کرد؟' }
 ];
 
 /* ============================================================
-   ۷) PERIMETER GENERATORS
+   ۸) PERIMETER GENERATORS
    ============================================================ */
 function genSquarePerimeter(diff) {
   const [a, b] = diffRange(diff);
@@ -535,15 +598,23 @@ function genSquarePerimeter(diff) {
       topic: 'perimeter', key: 'sq-p',
       prompt: `محیط مربعی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`,
       shape: Shapes.square(s), type: 'numeric', answer: ans, unit: 'سانتی‌متر',
-      steps: ['فرمول محیط مربع: محیط = ۴ × ضلع', `محیط = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)} سانتی‌متر`]
+      steps: [
+        `مربع ۴ ضلع مساوی دارد.`,
+        `محیط = ۴ × ضلع`,
+        `محیط = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)} سانتی‌متر`
+      ]
     };
   }
   const ctx = pick(CTX_P.square);
   return {
     topic: 'perimeter', key: 'sq-p',
-    prompt: `${ctx.story} ${fa(s)} ${ctx.u} داریم. ${ctx.ask}`,
+    prompt: `${ctx.story} ${fa(s)} ${ctx.u} است. ${ctx.ask}`,
     shape: Shapes.square(s), type: 'numeric', answer: ans, unit: ctx.u,
-    steps: ['مربع است → ۴ ضلع مساوی.', `محیط = ۴ × ضلع = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)}${pct(ctx.u)}`]
+    steps: [
+      `مربع ۴ ضلع مساوی دارد.`,
+      `محیط = ۴ × ضلع`,
+      `محیط = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)}${pct(ctx.u)}`
+    ]
   };
 }
 genSquarePerimeter.levels = ['easy', 'medium', 'hard'];
@@ -557,15 +628,23 @@ function genRectPerimeter(diff) {
       topic: 'perimeter', key: 'rect-p',
       prompt: `محیط مستطیلی با طول ${fa(w)} و عرض ${fa(h)} سانتی‌متر چقدر است؟`,
       shape: Shapes.rectangle(w, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر',
-      steps: ['فرمول: محیط = ۲ × (طول + عرض)', `محیط = ${eq(`۲ × (${fa(w)} + ${fa(h)})`)} = ${fa(ans)} سانتی‌متر`]
+      steps: [
+        `مستطیل ۴ ضلع دارد: دو طول و دو عرض.`,
+        `محیط = ۲ × (طول + عرض)`,
+        `محیط = ${eq(`۲ × (${fa(w)} + ${fa(h)})`)} = ${eq(`۲ × ${fa(w + h)}`)} = ${fa(ans)} سانتی‌متر`
+      ]
     };
   }
   const ctx = pick(CTX_P.rectangle);
   return {
     topic: 'perimeter', key: 'rect-p',
-    prompt: `${ctx.story} ${fa(w)} ${ctx.u} و عرض ${fa(h)} ${ctx.u} داریم. ${ctx.ask}`,
+    prompt: `${ctx.story} ${fa(w)} ${ctx.u} و عرض ${fa(h)} ${ctx.u} است. ${ctx.ask}`,
     shape: Shapes.rectangle(w, h), type: 'numeric', answer: ans, unit: ctx.u,
-    steps: ['مستطیل → دو ضلع روبه‌رو مساوی.', 'محیط = ۲ × (طول + عرض)', `محیط = ${eq(`۲ × (${fa(w)} + ${fa(h)})`)} = ${fa(ans)}${pct(ctx.u)}`]
+    steps: [
+      `مستطیل ۴ ضلع دارد: دو طول و دو عرض.`,
+      `محیط = ۲ × (طول + عرض)`,
+      `محیط = ${eq(`۲ × (${fa(w)} + ${fa(h)})`)} = ${fa(ans)}${pct(ctx.u)}`
+    ]
   };
 }
 genRectPerimeter.levels = ['easy', 'medium', 'hard'];
@@ -576,34 +655,40 @@ function genTrianglePerimeter(diff) {
   do {
     x = ri(a, b); y = ri(a, b); z = ri(a, b);
     guard++;
-  } while ((x + y <= z || x + z <= y || y + z <= x) && guard < 30);
-  if (guard >= 30) { x = a; y = a + 1; z = a + 2; }
+  } while ((x + y <= z || x + z <= y || y + z <= x) && guard < 40);
+  if (guard >= 40) { x = a; y = a + 1; z = a + 2; }
   const ans = x + y + z;
   const ctx = diff === 'easy' ? { story: '', u: 'سانتی‌متر', ask: '' } : pick(CTX_P.triangle);
   const prompt = diff === 'easy'
     ? `محیط مثلثی با اضلاع ${fa(x)}، ${fa(y)} و ${fa(z)} سانتی‌متر چقدر است؟`
-    : `${ctx.story} ${fa(x)}، ${fa(y)} و ${fa(z)} ${ctx.u} داریم. ${ctx.ask}`;
+    : `${ctx.story} ${fa(x)}، ${fa(y)} و ${fa(z)} ${ctx.u}. ${ctx.ask}`;
   return {
     topic: 'perimeter', key: 'tri-p',
     prompt, shape: Shapes.triangle(x, y, z),
     type: 'numeric', answer: ans, unit: ctx.u,
-    steps: ['محیط مثلث = مجموع سه ضلع', `محیط = ${eq(`${fa(x)} + ${fa(y)} + ${fa(z)}`)} = ${fa(ans)}${pct(ctx.u)}`]
+    steps: [
+      `محیط مثلث = جمع سه ضلع`,
+      `محیط = ${eq(`${fa(x)} + ${fa(y)} + ${fa(z)}`)} = ${fa(ans)}${pct(ctx.u)}`
+    ]
   };
 }
 genTrianglePerimeter.levels = ['easy', 'medium', 'hard'];
 
 function genCirclePerimeter(diff) {
-  const r = ri(2, diff === 'hard' ? 12 : 8);
+  const r = ri(2, diff === 'hard' ? 6 : 5);
   const ans = round(2 * 3.14 * r, 2);
   const ctx = diff === 'hard' ? pick(CTX_P.circle) : { story: '', u: 'سانتی‌متر', ask: '' };
   const prompt = diff === 'hard'
-    ? `${ctx.story} ${fa(r)} ${ctx.u} داریم. ${ctx.ask}`
-    : `محیط دایره‌ای با شعاع ${fa(r)} سانتی‌متر چقدر است؟ (π ≈ ۳٫۱۴)`;
+    ? `${ctx.story} ${fa(r)} ${ctx.u}. ${ctx.ask}`
+    : `محیط دایره‌ای با شعاع ${fa(r)} سانتی‌متر چقدر است؟ (π = ۳٫۱۴)`;
   return {
     topic: 'perimeter', key: 'circ-p',
     prompt, shape: Shapes.circle(r),
     type: 'numeric', answer: ans, unit: ctx.u,
-    steps: ['فرمول محیط دایره: محیط = ۲ × π × شعاع', `محیط = ${eq(`۲ × ۳٫۱۴ × ${fa(r)}`)} = ${faDec(ans)}${pct(ctx.u)}`]
+    steps: [
+      `محیط دایره = ۲ × π × شعاع`,
+      `محیط = ${eq(`۲ × ۳٫۱۴ × ${fa(r)}`)} = ${faDec(ans)}${pct(ctx.u)}`
+    ]
   };
 }
 genCirclePerimeter.levels = ['medium', 'hard'];
@@ -614,15 +699,15 @@ function genParallelogramPerimeter(diff) {
   const ans = 2 * (x + y);
   const ctx = diff === 'hard' ? pick(CTX_P.parallelogram) : { story: '', u: 'سانتی‌متر', ask: '' };
   const prompt = diff === 'hard'
-    ? `${ctx.story} ${fa(x)} و ${fa(y)} ${ctx.u} داریم. ${ctx.ask}`
+    ? `${ctx.story} ${fa(x)} و ${fa(y)} ${ctx.u}. ${ctx.ask}`
     : `محیط متوازی‌الاضلاعی با اضلاع ${fa(x)} و ${fa(y)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'perimeter', key: 'para-p',
     prompt, shape: Shapes.parallelogram(x, y),
     type: 'numeric', answer: ans, unit: ctx.u,
     steps: [
-      'اضلاع روبه‌رو در متوازی‌الاضلاع مساوی‌اند.',
-      'محیط = ۲ × (ضلع بزرگ + ضلع کوچک)',
+      `اضلاع روبه‌رو در متوازی‌الاضلاع مساوی‌اند.`,
+      `محیط = ۲ × (ضلع بزرگ + ضلع کوچک)`,
       `محیط = ${eq(`۲ × (${fa(x)} + ${fa(y)})`)} = ${fa(ans)}${pct(ctx.u)}`
     ]
   };
@@ -635,13 +720,16 @@ function genRhombusPerimeter(diff) {
   const ans = 4 * s;
   const ctx = diff === 'hard' ? pick(CTX_P.rhombus) : { story: '', u: 'سانتی‌متر', ask: '' };
   const prompt = diff === 'hard'
-    ? `${ctx.story} ${fa(s)} ${ctx.u} داریم. ${ctx.ask}`
+    ? `${ctx.story} ${fa(s)} ${ctx.u}. ${ctx.ask}`
     : `محیط لوزی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'perimeter', key: 'rhom-p',
     prompt, shape: Shapes.rhombusSide(s),
     type: 'numeric', answer: ans, unit: ctx.u,
-    steps: ['چهار ضلع لوزی مساوی‌اند.', `محیط = ۴ × ضلع = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)}${pct(ctx.u)}`]
+    steps: [
+      `لوزی ۴ ضلع مساوی دارد.`,
+      `محیط = ۴ × ضلع = ${eq(`۴ × ${fa(s)}`)} = ${fa(ans)}${pct(ctx.u)}`
+    ]
   };
 }
 genRhombusPerimeter.levels = ['medium', 'hard'];
@@ -654,15 +742,16 @@ function genPolygonPerimeter(diff) {
   const ans = n * s;
   const nameMap = { 3: 'مثلث', 4: 'مربع', 5: 'پنج‌ضلعی', 6: 'شش‌ضلعی', 8: 'هشت‌ضلعی' };
   const prompt = diff === 'hard'
-    ? `باغ گل ${nameMap[n]} منتظم با ضلع ${fa(s)} متر داریم. برای نرده‌کشی دور آن چقدر نرده لازم است؟`
+    ? `باغ گل مدرسه ${nameMap[n]} منتظم است و هر ضلعش ${fa(s)} متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟`
     : `محیط یک ${nameMap[n]} منتظم با ضلع ${fa(s)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'perimeter', key: 'poly-p',
     prompt, shape: Shapes.regularPolygon(n, s),
     type: 'numeric', answer: ans, unit: diff === 'hard' ? 'متر' : 'سانتی‌متر',
     steps: [
-      `در ${nameMap[n]} منتظم، همه‌ی اضلاع مساوی‌اند.`,
-      `محیط = تعداد ضلع × طول ضلع = ${eq(`${fa(n)} × ${fa(s)}`)} = ${fa(ans)}`
+      `در ${nameMap[n]} منتظم همه‌ی اضلاع مساوی‌اند.`,
+      `محیط = تعداد ضلع × طول یک ضلع`,
+      `محیط = ${eq(`${fa(n)} × ${fa(s)}`)} = ${fa(ans)}`
     ]
   };
 }
@@ -673,7 +762,7 @@ function genFindSideFromPerimeter(diff) {
   const s = ri(a, b);
   const p = 4 * s;
   const stories = [
-    `محیط یک زمین بازی مربعی ${fa(p)} متر است. برای خرید نرده، باید طول یک ضلع را بدانیم. ضلع چقدر است؟`,
+    `محیط یک زمین بازی مربعی ${fa(p)} متر است. طول هر ضلع چقدر است؟`,
     `دور یک سفره مربعی ${fa(p)} سانتی‌متر نوار لازم است. ضلع سفره چقدر است؟`,
     `محیط یک قاب مربعی ${fa(p)} سانتی‌متر است. طول هر ضلع چقدر است؟`
   ];
@@ -681,13 +770,17 @@ function genFindSideFromPerimeter(diff) {
     topic: 'perimeter', key: 'find-side',
     prompt: diff === 'hard' ? pick(stories) : `محیط مربعی ${fa(p)} سانتی‌متر است. طول ضلع آن چقدر است؟`,
     shape: Shapes.square('?'), type: 'numeric', answer: s, unit: 'سانتی‌متر',
-    steps: ['می‌دانیم: محیط = ۴ × ضلع', 'پس: ضلع = محیط ÷ ۴', `ضلع = ${eq(`${fa(p)} ÷ ۴`)} = ${fa(s)} سانتی‌متر`]
+    steps: [
+      `می‌دانیم: محیط = ۴ × ضلع`,
+      `پس ضلع = محیط ÷ ۴`,
+      `ضلع = ${eq(`${fa(p)} ÷ ۴`)} = ${fa(s)} سانتی‌متر`
+    ]
   };
 }
 genFindSideFromPerimeter.levels = ['hard'];
 
 /* ============================================================
-   ۸) AREA GENERATORS
+   ۹) AREA GENERATORS
    ============================================================ */
 function genSquareArea(diff) {
   const [a, b] = diffRange(diff);
@@ -695,13 +788,16 @@ function genSquareArea(diff) {
   const ans = s * s;
   const ctx = diff !== 'easy' ? pick(CTX_A.square) : null;
   const prompt = ctx
-    ? `${ctx.story} ${fa(s)} ${ctx.u} داریم. ${ctx.ask}`
+    ? `${ctx.story} ${fa(s)} ${ctx.u}. ${ctx.ask}`
     : `مساحت مربعی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'area', key: 'sq-a',
     prompt, shape: Shapes.square(s), type: 'numeric', answer: ans,
     unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
-    steps: ['مساحت مربع = ضلع × ضلع', `مساحت = ${eq(`${fa(s)} × ${fa(s)}`)} = ${fa(ans)}`]
+    steps: [
+      `مساحت مربع = ضلع × ضلع`,
+      `مساحت = ${eq(`${fa(s)} × ${fa(s)}`)} = ${fa(ans)}`
+    ]
   };
 }
 genSquareArea.levels = ['easy', 'medium', 'hard'];
@@ -712,13 +808,16 @@ function genRectArea(diff) {
   const ans = w * h;
   const ctx = diff !== 'easy' ? pick(CTX_A.rectangle) : null;
   const prompt = ctx
-    ? `${ctx.story} ${fa(w)} ${ctx.u} و عرض ${fa(h)} ${ctx.u} داریم. ${ctx.ask}`
+    ? `${ctx.story} ${fa(w)} ${ctx.u} و عرض ${fa(h)} ${ctx.u}. ${ctx.ask}`
     : `مساحت مستطیلی با طول ${fa(w)} و عرض ${fa(h)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'area', key: 'rect-a',
     prompt, shape: Shapes.rectangle(w, h), type: 'numeric', answer: ans,
     unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
-    steps: ['مساحت مستطیل = طول × عرض', `مساحت = ${eq(`${fa(w)} × ${fa(h)}`)} = ${fa(ans)}`]
+    steps: [
+      `مساحت مستطیل = طول × عرض`,
+      `مساحت = ${eq(`${fa(w)} × ${fa(h)}`)} = ${fa(ans)}`
+    ]
   };
 }
 genRectArea.levels = ['easy', 'medium', 'hard'];
@@ -730,31 +829,34 @@ function genTriangleArea(diff) {
   const ans = (base * h) / 2;
   const ctx = diff === 'hard' ? pick(CTX_A.triangle) : null;
   const prompt = ctx
-    ? `${ctx.story} ${fa(base)} ${ctx.u} و ارتفاع ${fa(h)} ${ctx.u} داریم. ${ctx.ask}`
+    ? `${ctx.story} ${fa(base)} ${ctx.u} و ارتفاع ${fa(h)} ${ctx.u}. ${ctx.ask}`
     : `مساحت مثلثی با قاعده ${fa(base)} و ارتفاع ${fa(h)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'area', key: 'tri-a',
     prompt, shape: Shapes.triangleBH(base, h), type: 'numeric', answer: ans,
     unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
-    steps: ['مساحت مثلث = (قاعده × ارتفاع) ÷ ۲', `مساحت = ${eq(`(${fa(base)} × ${fa(h)}) ÷ ۲`)} = ${fa(ans)}`]
+    steps: [
+      `مساحت مثلث = (قاعده × ارتفاع) ÷ ۲`,
+      `مساحت = ${eq(`(${fa(base)} × ${fa(h)}) ÷ ۲`)} = ${eq(`${fa(base * h)} ÷ ۲`)} = ${fa(ans)}`
+    ]
   };
 }
 genTriangleArea.levels = ['medium', 'hard'];
 
 function genCircleArea(diff) {
-  const r = ri(2, diff === 'hard' ? 10 : 7);
+  const r = ri(2, diff === 'hard' ? 6 : 5);
   const ans = round(3.14 * r * r, 2);
   const ctx = diff === 'hard' ? pick(CTX_A.circle) : null;
   const prompt = ctx
-    ? `${ctx.story} ${fa(r)} ${ctx.u} داریم. ${ctx.ask}`
-    : `مساحت دایره‌ای با شعاع ${fa(r)} سانتی‌متر چقدر است؟ (π ≈ ۳٫۱۴)`;
+    ? `${ctx.story} ${fa(r)} ${ctx.u}. ${ctx.ask}`
+    : `مساحت دایره‌ای با شعاع ${fa(r)} سانتی‌متر چقدر است؟ (π = ۳٫۱۴)`;
   return {
     topic: 'area', key: 'circ-a',
     prompt, shape: Shapes.circle(r), type: 'numeric', answer: ans,
     unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
     steps: [
-      'مساحت دایره = π × شعاع²',
-      `مساحت = ${eq(`۳٫۱۴ × ${fa(r)}²`)} = ${eq(`۳٫۱۴ × ${fa(r * r)}`)} = ${faDec(ans)}`
+      `مساحت دایره = π × شعاع × شعاع`,
+      `مساحت = ${eq(`۳٫۱۴ × ${fa(r)} × ${fa(r)}`)} = ${faDec(ans)}`
     ]
   };
 }
@@ -764,11 +866,18 @@ function genParallelogramArea(diff) {
   const [a, b] = diffRange(diff);
   const base = ri(a, b), h = ri(a, b);
   const ans = base * h;
+  const ctx = diff === 'hard' ? pick(CTX_A.parallelogram) : null;
+  const prompt = ctx
+    ? `${ctx.story} ${fa(base)} ${ctx.u} و ارتفاع ${fa(h)} ${ctx.u}. ${ctx.ask}`
+    : `مساحت متوازی‌الاضلاعی با قاعده ${fa(base)} و ارتفاع ${fa(h)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'area', key: 'para-a',
-    prompt: `مساحت متوازی‌الاضلاعی با قاعده ${fa(base)} و ارتفاع ${fa(h)} سانتی‌متر چقدر است؟`,
-    shape: Shapes.parallelogram(base, 12, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع',
-    steps: ['مساحت متوازی‌الاضلاع = قاعده × ارتفاع', `مساحت = ${eq(`${fa(base)} × ${fa(h)}`)} = ${fa(ans)}`]
+    prompt, shape: Shapes.parallelogram(base, 12, h), type: 'numeric', answer: ans,
+    unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
+    steps: [
+      `مساحت متوازی‌الاضلاع = قاعده × ارتفاع`,
+      `مساحت = ${eq(`${fa(base)} × ${fa(h)}`)} = ${fa(ans)}`
+    ]
   };
 }
 genParallelogramArea.levels = ['medium', 'hard'];
@@ -778,12 +887,16 @@ function genRhombusArea(diff) {
   let d1 = ri(a, b), d2 = ri(a, b);
   if ((d1 * d2) % 2 !== 0) d2 += 1;
   const ans = (d1 * d2) / 2;
+  const ctx = diff === 'hard' ? pick(CTX_A.rhombus) : null;
+  const prompt = ctx
+    ? `${ctx.story} ${fa(d1)} و ${fa(d2)} ${ctx.u}. ${ctx.ask}`
+    : `مساحت لوزی با قطرهای ${fa(d1)} و ${fa(d2)} سانتی‌متر چقدر است؟`;
   return {
     topic: 'area', key: 'rhom-a',
-    prompt: `مساحت لوزی با قطرهای ${fa(d1)} و ${fa(d2)} سانتی‌متر چقدر است؟`,
-    shape: Shapes.rhombusD(d1, d2), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع',
+    prompt, shape: Shapes.rhombusD(d1, d2), type: 'numeric', answer: ans,
+    unit: ctx ? ctx.u + ' مربع' : 'سانتی‌متر مربع',
     steps: [
-      'مساحت لوزی = (قطر بزرگ × قطر کوچک) ÷ ۲',
+      `مساحت لوزی = (قطر بزرگ × قطر کوچک) ÷ ۲`,
       `مساحت = ${eq(`(${fa(d1)} × ${fa(d2)}) ÷ ۲`)} = ${fa(ans)}`
     ]
   };
@@ -800,7 +913,7 @@ function genTrapezoidArea(diff) {
     prompt: `مساحت ذوزنقه‌ای با دو قاعده ${fa(base1)} و ${fa(base2)} و ارتفاع ${fa(h)} سانتی‌متر چقدر است؟`,
     shape: Shapes.trapezoid(base1, base2, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع',
     steps: [
-      'مساحت ذوزنقه = ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲',
+      `مساحت ذوزنقه = ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲`,
       `مساحت = ${eq(`((${fa(base1)} + ${fa(base2)}) × ${fa(h)}) ÷ ۲`)} = ${fa(ans)}`
     ]
   };
@@ -812,16 +925,16 @@ function genCompositeArea(diff) {
   const variant = pick(['L', 'house', 'T']);
 
   if (variant === 'L') {
-    const W1 = ri(a, b), H1 = ri(a, b);
+    const W1 = ri(a, b), H1 = ri(a, Math.min(6, b));
     const W2 = ri(Math.max(2, Math.floor(W1 / 2)), Math.max(3, W1 - 1));
-    const H2 = ri(a, b);
+    const H2 = ri(a, Math.min(6, b));
     const area1 = W1 * H1, area2 = W2 * H2, ans = area1 + area2;
     return {
       topic: 'area', key: 'comp-a',
-      prompt: `مساحت شکل L زیر چقدر است؟`,
+      prompt: `این شکل به شکل حرف L است (از دو مستطیل ساخته شده). مساحتش چقدر است؟`,
       shape: Shapes.lshape(W1, H1, W2, H2), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع',
       steps: [
-        'شکل را به دو مستطیل تقسیم می‌کنیم:',
+        `این شکل از دو مستطیل ساخته شده.`,
         `مستطیل بالایی: ${eq(`${fa(W1)} × ${fa(H1)}`)} = ${fa(area1)}`,
         `مستطیل پایینی: ${eq(`${fa(W2)} × ${fa(H2)}`)} = ${fa(area2)}`,
         `مساحت کل = ${eq(`${fa(area1)} + ${fa(area2)}`)} = ${fa(ans)}`
@@ -829,35 +942,37 @@ function genCompositeArea(diff) {
     };
   }
   if (variant === 'house') {
-    const W = ri(Math.max(4, a), b);
-    const H = ri(a, b);
-    let triH = ri(Math.max(2, a), Math.max(3, b));
+    const W = ri(Math.max(4, a), Math.min(8, b));
+    const H = ri(a, Math.min(6, b));
+    let triH = ri(2, 4);
     if ((W * triH) % 2 !== 0) triH += 1;
     const rectArea = W * H;
     const triArea = (W * triH) / 2;
     const ans = rectArea + triArea;
     return {
       topic: 'area', key: 'comp-a',
-      prompt: `نقشه یک خانه به شکل زیر (مستطیل + سقف مثلثی). مساحت کل چقدر است؟`,
+      prompt: `این شکل مثل یک خانه است: یک مستطیل (اتاق) و یک مثلث (سقف) روی آن. مساحت کل چقدر است؟`,
       shape: Shapes.house(W, H, triH), type: 'numeric', answer: ans, unit: 'متر مربع',
       steps: [
-        `مساحت مستطیل: ${eq(`${fa(W)} × ${fa(H)}`)} = ${fa(rectArea)}`,
-        `مساحت مثلث: ${eq(`(${fa(W)} × ${fa(triH)}) ÷ ۲`)} = ${fa(triArea)}`,
+        `مساحت مستطیل (اتاق) = طول × عرض`,
+        `مساحت مستطیل = ${eq(`${fa(W)} × ${fa(H)}`)} = ${fa(rectArea)}`,
+        `مساحت مثلث (سقف) = (قاعده × ارتفاع) ÷ ۲`,
+        `مساحت مثلث = ${eq(`(${fa(W)} × ${fa(triH)}) ÷ ۲`)} = ${fa(triArea)}`,
         `مساحت کل = ${eq(`${fa(rectArea)} + ${fa(triArea)}`)} = ${fa(ans)}`
       ]
     };
   }
-  const WT = ri(a, b), HT = ri(2, Math.max(3, Math.floor(b / 2)));
-  const WB = ri(2, Math.max(3, WT - 1)), HB = ri(a, b);
+  const WT = ri(a, b), HT = ri(2, 3);
+  const WB = ri(2, Math.max(3, WT - 1)), HB = ri(a, Math.min(6, b));
   const areaT = WT * HT, areaB = WB * HB, ans = areaT + areaB;
   return {
     topic: 'area', key: 'comp-a',
-    prompt: `مساحت شکل T زیر چقدر است؟`,
+    prompt: `این شکل شبیه حرف T است. مساحتش چقدر است؟`,
     shape: Shapes.tshape(WT, HT, WB, HB), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع',
     steps: [
-      'شکل را به دو مستطیل تقسیم می‌کنیم:',
-      `مستطیل افقی: ${eq(`${fa(WT)} × ${fa(HT)}`)} = ${fa(areaT)}`,
-      `مستطیل عمودی: ${eq(`${fa(WB)} × ${fa(HB)}`)} = ${fa(areaB)}`,
+      `این شکل از دو مستطیل ساخته شده.`,
+      `مستطیل افقی بالا: ${eq(`${fa(WT)} × ${fa(HT)}`)} = ${fa(areaT)}`,
+      `مستطیل عمودی پایین: ${eq(`${fa(WB)} × ${fa(HB)}`)} = ${fa(areaB)}`,
       `مساحت کل = ${eq(`${fa(areaT)} + ${fa(areaB)}`)} = ${fa(ans)}`
     ]
   };
@@ -865,7 +980,90 @@ function genCompositeArea(diff) {
 genCompositeArea.levels = ['hard'];
 
 /* ============================================================
-   ۹) FRACTION GENERATORS
+   ۱۰) VOLUME GENERATORS
+   ============================================================ */
+function genCubeVolume(diff) {
+  const [a, b] = diffRange(diff);
+  const s = ri(a, Math.min(6, b));
+  const ans = s * s * s;
+  if (diff === 'easy') {
+    return {
+      topic: 'volume', key: 'cube-v',
+      prompt: `حجم مکعبی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`,
+      shape: Shapes.cube(s), type: 'numeric', answer: ans, unit: 'سانتی‌متر مکعب',
+      steps: [
+        `حجم مکعب = ضلع × ضلع × ضلع`,
+        `حجم = ${eq(`${fa(s)} × ${fa(s)} × ${fa(s)}`)} = ${fa(ans)} سانتی‌متر مکعب`
+      ]
+    };
+  }
+  const ctx = pick(CTX_V.cube);
+  return {
+    topic: 'volume', key: 'cube-v',
+    prompt: `${ctx.story} ${fa(s)} ${ctx.u}. ${ctx.ask}`,
+    shape: Shapes.cube(s), type: 'numeric', answer: ans, unit: ctx.u + ' مکعب',
+    steps: [
+      `مکعب است: همه‌ی ضلع‌ها مساوی.`,
+      `حجم = ضلع × ضلع × ضلع`,
+      `حجم = ${eq(`${fa(s)} × ${fa(s)} × ${fa(s)}`)} = ${fa(ans)}${pct(ctx.u + ' مکعب')}`
+    ]
+  };
+}
+genCubeVolume.levels = ['easy', 'medium', 'hard'];
+
+function genBoxVolume(diff) {
+  const [a, b] = diffRange(diff);
+  const w = ri(a, Math.min(6, b));
+  const h = ri(a, Math.min(5, b));
+  const d = ri(a, Math.min(5, b));
+  const ans = w * h * d;
+  if (diff === 'easy') {
+    return {
+      topic: 'volume', key: 'box-v',
+      prompt: `حجم مکعب مستطیلی به طول ${fa(w)}، عرض ${fa(h)} و ارتفاع ${fa(d)} سانتی‌متر چقدر است؟`,
+      shape: Shapes.box(w, h, d), type: 'numeric', answer: ans, unit: 'سانتی‌متر مکعب',
+      steps: [
+        `حجم مکعب مستطیل = طول × عرض × ارتفاع`,
+        `حجم = ${eq(`${fa(w)} × ${fa(h)} × ${fa(d)}`)} = ${fa(ans)} سانتی‌متر مکعب`
+      ]
+    };
+  }
+  const ctx = pick(CTX_V.box);
+  return {
+    topic: 'volume', key: 'box-v',
+    prompt: `${ctx.story} ${fa(w)} ${ctx.u}، عرض ${fa(h)} ${ctx.u} و ارتفاع ${fa(d)} ${ctx.u}. ${ctx.ask}`,
+    shape: Shapes.box(w, h, d), type: 'numeric', answer: ans, unit: ctx.u + ' مکعب',
+    steps: [
+      `مکعب مستطیل سه اندازه دارد: طول، عرض و ارتفاع.`,
+      `حجم = طول × عرض × ارتفاع`,
+      `حجم = ${eq(`${fa(w)} × ${fa(h)} × ${fa(d)}`)} = ${fa(ans)}${pct(ctx.u + ' مکعب')}`
+    ]
+  };
+}
+genBoxVolume.levels = ['easy', 'medium', 'hard'];
+
+function genFindEdgeFromVolume(diff) {
+  const s = ri(2, 5);
+  const v = s * s * s;
+  const stories = [
+    `حجم یک جعبه‌ی مکعبی ${fa(v)} سانتی‌متر مکعب است. هر ضلع آن چقدر است؟`,
+    `حجم یک تاس بازی ${fa(v)} سانتی‌متر مکعب است. طول هر ضلعش چقدر است؟`
+  ];
+  return {
+    topic: 'volume', key: 'find-edge',
+    prompt: diff === 'hard' ? pick(stories) : `حجم مکعبی ${fa(v)} سانتی‌متر مکعب است. ضلع آن چقدر است؟`,
+    shape: Shapes.cube('?'), type: 'numeric', answer: s, unit: 'سانتی‌متر',
+    steps: [
+      `حجم مکعب = ضلع × ضلع × ضلع`,
+      `پس ضلع = ریشه‌ی سومِ حجم`,
+      `چون ${eq(`${fa(s)} × ${fa(s)} × ${fa(s)}`)} = ${fa(v)}، پس ضلع = ${fa(s)} سانتی‌متر`
+    ]
+  };
+}
+genFindEdgeFromVolume.levels = ['hard'];
+
+/* ============================================================
+   ۱۱) FRACTION GENERATORS
    ============================================================ */
 function makeFracChoices(correct, genWrong, count = 3) {
   const opts = [correct];
@@ -885,9 +1083,10 @@ function makeFracChoices(correct, genWrong, count = 3) {
 
 function genFracAdd(diff) {
   const sameDen = diff === 'easy';
-  const maxD = diff === 'hard' ? 12 : 8;
+  const maxD = diff === 'hard' ? 10 : 8;
   let d1, d2;
-  if (sameDen) { d1 = d2 = ri(3, maxD); } else { d1 = ri(2, maxD); d2 = ri(2, maxD); }
+  if (sameDen) { d1 = d2 = ri(3, maxD); }
+  else { d1 = ri(2, maxD); d2 = ri(2, maxD); }
   const n1 = ri(1, d1 - 1), n2 = ri(1, d2 - 1);
   const a = { n: n1, d: d1 }, b = { n: n2, d: d2 };
   const ans = fracAdd(a, b);
@@ -895,28 +1094,45 @@ function genFracAdd(diff) {
     const dd1 = ri(2, maxD), dd2 = ri(2, maxD);
     return fracAdd({ n: ri(1, dd1 - 1), d: dd1 }, { n: ri(1, dd2 - 1), d: dd2 });
   });
-  const L = lcm(a.d, b.d);
+
+  let steps;
+  if (sameDen) {
+    steps = [
+      `مخرج‌ها هر دو ${fa(d1)} هستند (مساوی‌اند).`,
+      `چون مخرج‌ها یکی است، فقط صورت‌ها را جمع می‌کنیم.`,
+      `صورت: ${eq(`${fa(n1)} + ${fa(n2)}`)} = ${fa(n1 + n2)}`,
+      `نتیجه: ${fracHTML({ n: n1 + n2, d: d1 })} که ساده می‌شود به ${fracHTML(ans)}`
+    ];
+  } else {
+    const L = lcm(d1, d2);
+    const k1 = L / d1, k2 = L / d2;
+    const newN1 = n1 * k1, newN2 = n2 * k2;
+    steps = [
+      `مخرج‌ها فرق دارند: ${fa(d1)} و ${fa(d2)}`,
+      `اول مخرج مشترک می‌گیریم. کوچک‌ترین مضرب مشترک ${fa(d1)} و ${fa(d2)} می‌شود ${fa(L)}.`,
+      `کسر اول: هم مخرج و هم صورت را در ${fa(k1)} ضرب می‌کنیم: ${fracHTML(a)} = ${fracHTML({ n: newN1, d: L })}`,
+      `کسر دوم: هم مخرج و هم صورت را در ${fa(k2)} ضرب می‌کنیم: ${fracHTML(b)} = ${fracHTML({ n: newN2, d: L })}`,
+      `الان مخرج‌ها یکی شده‌اند. صورت‌ها را جمع می‌کنیم:`,
+      `${eq(`${fa(newN1)} + ${fa(newN2)}`)} = ${fa(newN1 + newN2)}`,
+      `نتیجه: ${fracHTML({ n: newN1 + newN2, d: L })} که ساده می‌شود به ${fracHTML(ans)}`
+    ];
+  }
+
   return {
     topic: 'fractions', key: 'frac-add',
-    prompt: `حاصل جمع مقابل کدام است؟`,
-    promptHTML: eq(`${fracHTML(a)} + ${fracHTML(b)} = ?`),
-    type: 'choice', choices, correct: ans,
-    steps: sameDen ? [
-      'مخرج‌ها مساوی؛ فقط صورت‌ها را جمع می‌کنیم.',
-      `${eq(`${fa(n1)} + ${fa(n2)}`)} = ${fa(n1 + n2)} — نتیجه ${fracHTML(ans)}`
-    ] : [
-      `مخرج مشترک: ${fa(L)}`,
-      `${fracHTML(a)} + ${fracHTML(b)} = ${fracHTML(ans)}`
-    ]
+    prompt: `حاصل جمع این دو کسر چقدر است؟`,
+    promptHTML: `<span dir="ltr">${fracHTML(a)} + ${fracHTML(b)} = ?</span>`,
+    type: 'choice', choices, correct: ans, steps
   };
 }
 genFracAdd.levels = ['easy', 'medium', 'hard'];
 
 function genFracSub(diff) {
   const sameDen = diff === 'easy';
-  const maxD = diff === 'hard' ? 12 : 8;
+  const maxD = diff === 'hard' ? 10 : 8;
   let d1, d2;
-  if (sameDen) { d1 = d2 = ri(3, maxD); } else { d1 = ri(2, maxD); d2 = ri(2, maxD); }
+  if (sameDen) { d1 = d2 = ri(3, maxD); }
+  else { d1 = ri(2, maxD); d2 = ri(2, maxD); }
   let n1 = ri(1, d1 - 1), n2 = ri(1, d2 - 1);
   let a = { n: n1, d: d1 }, b = { n: n2, d: d2 };
   if (sameDen) { if (n1 < n2) { [n1, n2] = [n2, n1]; a = { n: n1, d: d1 }; b = { n: n2, d: d2 }; } }
@@ -927,37 +1143,55 @@ function genFracSub(diff) {
     const f1 = { n: ri(1, dd1 - 1), d: dd1 }, f2 = { n: ri(1, dd2 - 1), d: dd2 };
     return fracVal(f1) > fracVal(f2) ? fracSub(f1, f2) : fracSub(f2, f1);
   });
-  const L = lcm(a.d, b.d);
+
+  let steps;
+  if (sameDen) {
+    steps = [
+      `مخرج‌ها هر دو ${fa(d1)} هستند (مساوی).`,
+      `فقط صورت‌ها را کم می‌کنیم.`,
+      `صورت: ${eq(`${fa(a.n)} − ${fa(b.n)}`)} = ${fa(a.n - b.n)}`,
+      `نتیجه: ${fracHTML({ n: a.n - b.n, d: d1 })} که ساده می‌شود به ${fracHTML(ans)}`
+    ];
+  } else {
+    const L = lcm(a.d, b.d);
+    const k1 = L / a.d, k2 = L / b.d;
+    const newN1 = a.n * k1, newN2 = b.n * k2;
+    steps = [
+      `مخرج‌ها فرق دارند: ${fa(a.d)} و ${fa(b.d)}`,
+      `اول مخرج مشترک می‌گیریم. کوچک‌ترین مضرب مشترک می‌شود ${fa(L)}.`,
+      `کسر اول: هم مخرج و هم صورت را در ${fa(k1)} ضرب می‌کنیم: ${fracHTML(a)} = ${fracHTML({ n: newN1, d: L })}`,
+      `کسر دوم: هم مخرج و هم صورت را در ${fa(k2)} ضرب می‌کنیم: ${fracHTML(b)} = ${fracHTML({ n: newN2, d: L })}`,
+      `الان مخرج‌ها یکی شده‌اند. صورت‌ها را کم می‌کنیم:`,
+      `${eq(`${fa(newN1)} − ${fa(newN2)}`)} = ${fa(newN1 - newN2)}`,
+      `نتیجه: ${fracHTML({ n: newN1 - newN2, d: L })} که ساده می‌شود به ${fracHTML(ans)}`
+    ];
+  }
+
   return {
     topic: 'fractions', key: 'frac-sub',
-    prompt: `حاصل تفریق مقابل کدام است؟`,
-    promptHTML: eq(`${fracHTML(a)} − ${fracHTML(b)} = ?`),
-    type: 'choice', choices, correct: ans,
-    steps: sameDen ? [
-      'مخرج‌ها مساوی؛ صورت‌ها را کم می‌کنیم.',
-      `${eq(`${fa(a.n)} − ${fa(b.n)}`)} = ${fa(a.n - b.n)} — نتیجه ${fracHTML(ans)}`
-    ] : [
-      `مخرج مشترک: ${fa(L)}`,
-      `${fracHTML(a)} − ${fracHTML(b)} = ${fracHTML(ans)}`
-    ]
+    prompt: `حاصل تفریق این دو کسر چقدر است؟`,
+    promptHTML: `<span dir="ltr">${fracHTML(a)} − ${fracHTML(b)} = ?</span>`,
+    type: 'choice', choices, correct: ans, steps
   };
 }
 genFracSub.levels = ['easy', 'medium', 'hard'];
 
 function genFracMul(diff) {
-  const maxD = diff === 'hard' ? 10 : 8;
-  const a = { n: ri(1, 8), d: ri(2, maxD) };
-  const b = { n: ri(1, 8), d: ri(2, maxD) };
+  const maxD = diff === 'hard' ? 8 : 6;
+  const a = { n: ri(1, 6), d: ri(2, maxD) };
+  const b = { n: ri(1, 6), d: ri(2, maxD) };
   const ans = fracMul(a, b);
-  const choices = makeFracChoices(ans, () => ({ n: ri(1, 12), d: ri(2, maxD) }));
+  const choices = makeFracChoices(ans, () => ({ n: ri(1, 10), d: ri(2, maxD) }));
   return {
     topic: 'fractions', key: 'frac-mul',
-    prompt: `حاصل ضرب کسرها کدام است؟`,
-    promptHTML: eq(`${fracHTML(a)} × ${fracHTML(b)} = ?`),
+    prompt: `حاصل ضرب این دو کسر چقدر است؟`,
+    promptHTML: `<span dir="ltr">${fracHTML(a)} × ${fracHTML(b)} = ?</span>`,
     type: 'choice', choices, correct: ans,
     steps: [
-      'در ضرب، صورت‌ها در هم و مخرج‌ها در هم ضرب می‌شوند.',
-      `= ${fracHTML({ n: a.n * b.n, d: a.d * b.d })}`,
+      `در ضرب کسرها نیازی به مخرج مشترک نیست!`,
+      `صورت‌ها را در هم ضرب می‌کنیم: ${eq(`${fa(a.n)} × ${fa(b.n)}`)} = ${fa(a.n * b.n)}`,
+      `مخرج‌ها را هم در هم ضرب می‌کنیم: ${eq(`${fa(a.d)} × ${fa(b.d)}`)} = ${fa(a.d * b.d)}`,
+      `نتیجه: ${fracHTML({ n: a.n * b.n, d: a.d * b.d })}`,
       `ساده‌شده: ${fracHTML(ans)}`
     ]
   };
@@ -965,20 +1199,23 @@ function genFracMul(diff) {
 genFracMul.levels = ['medium', 'hard'];
 
 function genFracDiv(diff) {
-  const maxD = diff === 'hard' ? 10 : 8;
-  const a = { n: ri(1, 8), d: ri(2, maxD) };
-  const b = { n: ri(1, 8), d: ri(2, maxD) };
+  const maxD = diff === 'hard' ? 8 : 6;
+  const a = { n: ri(1, 6), d: ri(2, maxD) };
+  const b = { n: ri(1, 6), d: ri(2, maxD) };
   const ans = fracDiv(a, b);
-  const choices = makeFracChoices(ans, () => ({ n: ri(1, 12), d: ri(2, maxD) }));
+  const choices = makeFracChoices(ans, () => ({ n: ri(1, 10), d: ri(2, maxD) }));
   return {
     topic: 'fractions', key: 'frac-div',
-    prompt: `حاصل تقسیم کسرها کدام است؟`,
-    promptHTML: eq(`${fracHTML(a)} ÷ ${fracHTML(b)} = ?`),
+    prompt: `حاصل تقسیم این دو کسر چقدر است؟`,
+    promptHTML: `<span dir="ltr">${fracHTML(a)} ÷ ${fracHTML(b)} = ?</span>`,
     type: 'choice', choices, correct: ans,
     steps: [
-      'در تقسیم، کسر دوم را معکوس کرده و ضرب می‌کنیم.',
-      `${fracHTML(a)} ÷ ${fracHTML(b)} = ${fracHTML(a)} × ${fracHTML({ n: b.d, d: b.n })}`,
-      `= ${fracHTML(ans)}`
+      `در تقسیم کسرها، کسر دوم را برعکس (معکوس) می‌کنیم.`,
+      `معکوس ${fracHTML(b)} می‌شود ${fracHTML({ n: b.d, d: b.n })}`,
+      `حالا ضرب می‌کنیم: ${fracHTML(a)} × ${fracHTML({ n: b.d, d: b.n })}`,
+      `صورت‌ها: ${eq(`${fa(a.n)} × ${fa(b.d)}`)} = ${fa(a.n * b.d)}`,
+      `مخرج‌ها: ${eq(`${fa(a.d)} × ${fa(b.n)}`)} = ${fa(a.d * b.n)}`,
+      `نتیجه: ${fracHTML({ n: a.n * b.d, d: a.d * b.n })} که ساده می‌شود به ${fracHTML(ans)}`
     ]
   };
 }
@@ -987,21 +1224,23 @@ genFracDiv.levels = ['hard'];
 function genFracSimplify(diff) {
   let a, ans, guard = 0;
   do {
-    const base = { n: ri(2, 8), d: ri(2, 9) };
-    const k = diff === 'hard' ? ri(3, 6) : ri(2, 4);
+    const base = { n: ri(2, 6), d: ri(2, 8) };
+    const k = diff === 'hard' ? ri(3, 5) : ri(2, 3);
     a = { n: base.n * k, d: base.d * k };
     ans = simplify(a.n, a.d);
     guard++;
   } while (ans.n === a.n && ans.d === a.d && guard < 20);
-  const choices = makeFracChoices(ans, () => ({ n: ri(2, 12), d: ri(2, 12) }));
+  const choices = makeFracChoices(ans, () => ({ n: ri(2, 10), d: ri(2, 10) }));
+  const g = gcd(a.n, a.d);
   return {
     topic: 'fractions', key: 'frac-simplify',
-    prompt: `کسر مقابل را ساده کنید:`,
+    prompt: `این کسر را ساده کن (تا جای ممکن کوچکش کن):`,
     promptHTML: fracHTML(a),
     type: 'choice', choices, correct: ans,
     steps: [
-      `ب.م.م صورت و مخرج: ${fa(gcd(a.n, a.d))}`,
-      `صورت و مخرج را بر ${fa(gcd(a.n, a.d))} تقسیم می‌کنیم.`,
+      `بزرگ‌ترین عددی که هم ${fa(a.n)} و هم ${fa(a.d)} بر آن بخش‌پذیرند: ${fa(g)}`,
+      `صورت را بر ${fa(g)} تقسیم می‌کنیم: ${eq(`${fa(a.n)} ÷ ${fa(g)}`)} = ${fa(ans.n)}`,
+      `مخرج را بر ${fa(g)} تقسیم می‌کنیم: ${eq(`${fa(a.d)} ÷ ${fa(g)}`)} = ${fa(ans.d)}`,
       `نتیجه: ${fracHTML(ans)}`
     ]
   };
@@ -1010,7 +1249,7 @@ genFracSimplify.levels = ['easy', 'medium', 'hard'];
 
 function genFracCompare(diff) {
   let d1, d2, n1, n2, a, b, guard = 0;
-  const maxD = diff === 'hard' ? 15 : 10;
+  const maxD = diff === 'hard' ? 10 : 8;
   do {
     d1 = ri(3, maxD); d2 = ri(3, maxD);
     n1 = ri(1, d1 - 1); n2 = ri(1, d2 - 1);
@@ -1019,10 +1258,11 @@ function genFracCompare(diff) {
   } while (fracVal(a) === fracVal(b) && guard < 20);
   const correct = fracVal(a) > fracVal(b) ? '>' : '<';
   const L = lcm(d1, d2);
+  const k1 = L / d1, k2 = L / d2;
   return {
     topic: 'fractions', key: 'frac-cmp',
-    prompt: `کدام علامت رابطه زیر را درست می‌کند؟`,
-    promptHTML: `${fracHTML(a)} &nbsp; ? &nbsp; ${fracHTML(b)}`,
+    prompt: `کدام علامت جای «?» بگذاریم تا درست شود؟ (یعنی کدام کسر بزرگ‌تر است؟)`,
+    promptHTML: `<span dir="ltr">${fracHTML(a)} &nbsp; ? &nbsp; ${fracHTML(b)}</span>`,
     type: 'choice',
     choices: [
       { n: '>', d: null, isSym: true },
@@ -1031,36 +1271,40 @@ function genFracCompare(diff) {
     ],
     correct: { n: correct, d: null, isSym: true },
     steps: [
-      `مخرج مشترک: ${fa(L)}`,
-      `${fracHTML({ n: a.n * L / d1, d: L })} و ${fracHTML({ n: b.n * L / d2, d: L })}`,
-      `${fracHTML(a)} ${correct === '>' ? '&gt;' : '&lt;'} ${fracHTML(b)}`
+      `برای مقایسه، مخرج مشترک می‌گیریم. مخرج مشترک می‌شود ${fa(L)}.`,
+      `کسر اول: ${fracHTML(a)} = ${fracHTML({ n: n1 * k1, d: L })}`,
+      `کسر دوم: ${fracHTML(b)} = ${fracHTML({ n: n2 * k2, d: L })}`,
+      `حالا مخرج‌ها یکی است. هر کدام صورت بزرگ‌تری دارد، بزرگ‌تر است.`,
+      `${eq(`${fa(n1 * k1)} ${correct === '>' ? '>' : '<'} ${fa(n2 * k2)}`)}`,
+      `پس ${fracHTML(a)} ${correct === '>' ? '&gt;' : '&lt;'} ${fracHTML(b)}`
     ]
   };
 }
 genFracCompare.levels = ['easy', 'medium', 'hard'];
 
 function genMixedToImproper(diff) {
-  const whole = ri(1, diff === 'hard' ? 5 : 3), d = ri(2, 8), n = ri(1, d - 1);
+  const whole = ri(1, diff === 'hard' ? 4 : 3), d = ri(2, 6), n = ri(1, d - 1);
   const imp = { n: whole * d + n, d };
-  const choices = makeFracChoices(imp, () => ({ n: ri(2, 40), d: ri(2, 9) }));
+  const choices = makeFracChoices(imp, () => ({ n: ri(2, 30), d: ri(2, 8) }));
   return {
     topic: 'fractions', key: 'mixed-imp',
-    prompt: `عدد مخلوط زیر را به کسر تبدیل کنید:`,
-    promptHTML: `${fa(whole)}${fracHTML({ n, d })}`,
+    prompt: `این عدد مخلوط را به یک کسر ساده تبدیل کن:`,
+    promptHTML: mixedHTML(imp),
     type: 'choice', choices, correct: imp,
     steps: [
-      'صورت = (عدد صحیح × مخرج) + صورت',
-      `= ${eq(`(${fa(whole)} × ${fa(d)}) + ${fa(n)}`)} = ${fa(whole * d + n)}`,
-      `کسر: ${fracHTML(imp)}`
+      `عدد مخلوط یعنی «${fa(whole)} تا کامل، به‌اضافه‌ی ${fracHTML({ n, d })}».`,
+      `هر کامل، ${fa(d)} قسمت از ${fa(d)} است. پس ${fa(whole)} کامل می‌شود ${eq(`${fa(whole)} × ${fa(d)}`)} = ${fa(whole * d)} قسمت.`,
+      `حالا ${fa(n)} قسمت هم اضافه می‌کنیم: ${eq(`${fa(whole * d)} + ${fa(n)}`)} = ${fa(whole * d + n)}`,
+      `پس صورت ${fa(whole * d + n)} و مخرج ${fa(d)} می‌شود: ${fracHTML(imp)}`
     ]
   };
 }
 genMixedToImproper.levels = ['medium', 'hard'];
 
 function genWordFrac(diff) {
-  const d = ri(3, 8);
+  const d = ri(3, 6);
   const n = ri(1, d - 1);
-  const total = d * ri(2, 6);
+  const total = d * ri(2, 4);
   const ans = (total / d) * n;
   const ctx = pick(CTX_FR);
   return {
@@ -1068,29 +1312,31 @@ function genWordFrac(diff) {
     prompt: `${ctx.name} ${fracHTML({ n, d })} از ${fa(total)} ${ctx.u} را ${ctx.verb}. ${ctx.q}`,
     type: 'numeric', answer: ans, unit: ctx.u,
     steps: [
-      `ابتدا یک قسمت از ${fa(d)}: ${eq(`${fa(total)} ÷ ${fa(d)}`)} = ${fa(total / d)}`,
-      `حالا ${fa(n)} قسمت: ${eq(`${fa(n)} × ${fa(total / d)}`)} = ${fa(ans)}${pct(ctx.u)}`
+      `کل مقدار ${fa(total)} ${ctx.u} است.`,
+      `اول ببینیم یک قسمت از ${fa(d)} چقدر است: ${eq(`${fa(total)} ÷ ${fa(d)}`)} = ${fa(total / d)}`,
+      `حالا ${fa(n)} قسمت را برداریم: ${eq(`${fa(n)} × ${fa(total / d)}`)} = ${fa(ans)}${pct(ctx.u)}`
     ]
   };
 }
 genWordFrac.levels = ['hard'];
 
 /* ============================================================
-   ۱۰) DECIMALS GENERATORS
+   ۱۲) DECIMALS GENERATORS
    ============================================================ */
 function genDecAdd(diff) {
-  const cfg = { easy: [1, 9, 1], medium: [5, 30, 2], hard: [10, 80, 2] };
+  const cfg = { easy: [1, 5, 1], medium: [2, 7, 1], hard: [3, 9, 2] };
   const [a, b, dec] = cfg[diff] || cfg.medium;
   const n1 = round(ri(a * 10, b * 10) / 10, dec);
   const n2 = round(ri(a * 10, b * 10) / 10, dec);
   const ans = round(n1 + n2, dec);
   return {
     topic: 'decimals', key: 'dec-add',
-    prompt: `حاصل جمع زیر را محاسبه کنید:`,
+    prompt: `حاصل جمع زیر را حساب کن:`,
     promptHTML: eq(`${faDec(n1, dec)} + ${faDec(n2, dec)} = ?`),
     type: 'numeric', answer: ans,
     steps: [
-      'اعداد را زیر هم می‌نویسیم و ممیزها را تراز می‌کنیم.',
+      `اعداد را زیر هم می‌نویسیم، طوری که ممیزها زیر هم باشند.`,
+      `مثل اعداد عادی جمع می‌کنیم.`,
       `${eq(`${faDec(n1, dec)} + ${faDec(n2, dec)}`)} = ${faDec(ans, dec)}`
     ]
   };
@@ -1098,7 +1344,7 @@ function genDecAdd(diff) {
 genDecAdd.levels = ['easy', 'medium', 'hard'];
 
 function genDecSub(diff) {
-  const cfg = { easy: [1, 9, 1], medium: [5, 30, 2], hard: [10, 80, 2] };
+  const cfg = { easy: [1, 5, 1], medium: [2, 7, 1], hard: [3, 9, 2] };
   const [a, b, dec] = cfg[diff] || cfg.medium;
   let n1 = round(ri(a * 10, b * 10) / 10, dec);
   let n2 = round(ri(a * 10, b * 10) / 10, dec);
@@ -1106,11 +1352,12 @@ function genDecSub(diff) {
   const ans = round(n1 - n2, dec);
   return {
     topic: 'decimals', key: 'dec-sub',
-    prompt: `حاصل تفریق زیر را محاسبه کنید:`,
+    prompt: `حاصل تفریق زیر را حساب کن:`,
     promptHTML: eq(`${faDec(n1, dec)} − ${faDec(n2, dec)} = ?`),
     type: 'numeric', answer: ans,
     steps: [
-      'اعداد را زیر هم می‌نویسیم و ممیزها را تراز می‌کنیم.',
+      `اعداد را زیر هم می‌نویسیم، ممیزها روبروی هم.`,
+      `مثل اعداد عادی تفریق می‌کنیم.`,
       `${eq(`${faDec(n1, dec)} − ${faDec(n2, dec)}`)} = ${faDec(ans, dec)}`
     ]
   };
@@ -1118,18 +1365,19 @@ function genDecSub(diff) {
 genDecSub.levels = ['easy', 'medium', 'hard'];
 
 function genDecMul(diff) {
-  const cfg = { medium: [2, 20, 1], hard: [5, 40, 2] };
+  const cfg = { medium: [2, 5, 1], hard: [3, 6, 2] };
   const [a, b, dec] = cfg[diff] || cfg.medium;
   const n1 = round(ri(a * 10, b * 10) / 10, dec);
-  const whole = ri(2, 9);
+  const whole = ri(2, 6);
   const ans = round(n1 * whole, dec);
   return {
     topic: 'decimals', key: 'dec-mul',
-    prompt: `حاصل ضرب زیر را محاسبه کنید:`,
+    prompt: `حاصل ضرب زیر را حساب کن:`,
     promptHTML: eq(`${faDec(n1, dec)} × ${fa(whole)} = ?`),
     type: 'numeric', answer: ans,
     steps: [
-      'بدون ممیز ضرب می‌کنیم، سپس ممیز را برمی‌گردانیم.',
+      `اول بدون ممیز ضرب می‌کنیم.`,
+      `بعد به تعداد ارقام اعشار، از راست ممیز می‌گذاریم.`,
       `${eq(`${faDec(n1, dec)} × ${fa(whole)}`)} = ${faDec(ans, dec)}`
     ]
   };
@@ -1138,15 +1386,15 @@ genDecMul.levels = ['medium', 'hard'];
 
 function genDecDiv(diff) {
   const whole = ri(2, 5);
-  const ans = round(ri(10, 50) / 10, 1);
+  const ans = round(ri(5, 20) / 10, 1);
   const n1 = round(ans * whole, 1);
   return {
     topic: 'decimals', key: 'dec-div',
-    prompt: `حاصل تقسیم زیر را محاسبه کنید:`,
+    prompt: `حاصل تقسیم زیر را حساب کن:`,
     promptHTML: eq(`${faDec(n1, 1)} ÷ ${fa(whole)} = ?`),
     type: 'numeric', answer: ans,
     steps: [
-      'عدد اعشاری را بر عدد صحیح تقسیم می‌کنیم.',
+      `عدد اعشاری را بر عدد صحیح تقسیم می‌کنیم.`,
       `${eq(`${faDec(n1, 1)} ÷ ${fa(whole)}`)} = ${faDec(ans, 1)}`
     ]
   };
@@ -1155,14 +1403,14 @@ genDecDiv.levels = ['hard'];
 
 function genDecCompare(diff) {
   const dec = diff === 'easy' ? 1 : 2;
-  const max = diff === 'hard' ? 999 : diff === 'medium' ? 500 : 99;
+  const max = diff === 'hard' ? 500 : 99;
   const n1 = round(ri(1, max) / 10, dec);
   let n2 = round(ri(1, max) / 10, dec);
   if (n1 === n2) n2 = round(n1 + 0.1, dec);
   const correct = n1 > n2 ? '>' : '<';
   return {
     topic: 'decimals', key: 'dec-cmp',
-    prompt: `کدام علامت رابطه زیر را درست می‌کند؟`,
+    prompt: `کدام علامت درست است؟`,
     promptHTML: eq(`${faDec(n1, dec)} &nbsp; ? &nbsp; ${faDec(n2, dec)}`),
     type: 'choice',
     choices: [
@@ -1172,8 +1420,9 @@ function genDecCompare(diff) {
     ],
     correct: { n: correct, d: null, isSym: true },
     steps: [
-      'ابتدا قسمت صحیح، سپس رقم‌های اعشار را از چپ به راست مقایسه می‌کنیم.',
-      `${eq(`${faDec(n1, dec)} ${correct === '>' ? '&gt;' : '&lt;'} ${faDec(n2, dec)}`)}`
+      `اول عدد صحیح را مقایسه می‌کنیم (قبل از ممیز).`,
+      `اگر مساوی بودند، رقم‌های بعد از ممیز را از چپ به راست مقایسه می‌کنیم.`,
+      `نتیجه: ${eq(`${faDec(n1, dec)} ${correct === '>' ? '>' : '<'} ${faDec(n2, dec)}`)}`
     ]
   };
 }
@@ -1183,9 +1432,9 @@ function genFracToDec(diff) {
   const options = [
     { n: 1, d: 2, v: 0.5 }, { n: 1, d: 4, v: 0.25 }, { n: 3, d: 4, v: 0.75 },
     { n: 1, d: 5, v: 0.2 }, { n: 2, d: 5, v: 0.4 }, { n: 3, d: 5, v: 0.6 },
-    { n: 1, d: 8, v: 0.125 }, { n: 1, d: 10, v: 0.1 }, { n: 3, d: 10, v: 0.3 }
+    { n: 1, d: 10, v: 0.1 }, { n: 3, d: 10, v: 0.3 }
   ];
-  const pool = diff === 'easy' ? options.filter(o => [0.5, 0.25, 0.2, 0.4].includes(o.v)) : options;
+  const pool = diff === 'easy' ? options.filter(o => [0.5, 0.25, 0.2].includes(o.v)) : options;
   const f = pick(pool);
   const wrong = shuffle(options.filter(o => o.v !== f.v)).slice(0, 3);
   const choices = shuffle([
@@ -1194,11 +1443,11 @@ function genFracToDec(diff) {
   ]);
   return {
     topic: 'decimals', key: 'frac-dec',
-    prompt: `کسر مقابل را به عدد اعشاری تبدیل کنید:`,
+    prompt: `این کسر را به عدد اعشاری تبدیل کن:`,
     promptHTML: fracHTML(f),
     type: 'choice', choices, correct: { n: String(f.v), d: null, isNum: true },
     steps: [
-      'صورت را بر مخرج تقسیم می‌کنیم:',
+      `صورت را بر مخرج تقسیم می‌کنیم.`,
       `${eq(`${fa(f.n)} ÷ ${fa(f.d)}`)} = ${faDec(f.v, 3)}`
     ]
   };
@@ -1217,11 +1466,11 @@ function genDecToFrac(diff) {
   const choices = shuffle([{ n: f.n, d: f.d }, ...wrong]);
   return {
     topic: 'decimals', key: 'dec-frac',
-    prompt: `عدد اعشاری مقابل را به کسر تبدیل کنید:`,
+    prompt: `این عدد اعشاری را به کسر تبدیل کن:`,
     promptHTML: eq(faDec(f.v, 3)),
     type: 'choice', choices, correct: { n: f.n, d: f.d },
     steps: [
-      'مخرج را بر اساس تعداد رقم‌های اعشار می‌نویسیم.',
+      `بعد از ممیز چند رقم داریم؟ اگر ۱ رقم باشد مخرج ۱۰، اگر ۲ رقم باشد مخرج ۱۰۰ می‌شود.`,
       `نتیجه: ${fracHTML({ n: f.n, d: f.d })}`
     ]
   };
@@ -1229,15 +1478,15 @@ function genDecToFrac(diff) {
 genDecToFrac.levels = ['medium', 'hard'];
 
 function genDecWord(diff) {
-  const whole = ri(2, 5);
-  const price = round(ri(15, 80) / 10, 1);
+  const whole = ri(2, 4);
+  const price = round(ri(15, 45) / 10, 1);
   const ans = round(whole * price, 1);
   return {
     topic: 'decimals', key: 'dec-word',
-    prompt: `اگر قیمت یک دفتر ${faDec(price, 1)} هزار تومان باشد، قیمت ${fa(whole)} دفتر چقدر می‌شود؟ (به هزار تومان)`,
+    prompt: `قیمت یک دفتر ${faDec(price, 1)} هزار تومان است. قیمت ${fa(whole)} دفتر چقدر می‌شود؟ (پاسخ به هزار تومان)`,
     type: 'numeric', answer: ans, unit: 'هزار تومان',
     steps: [
-      'برای چند برابر، ضرب می‌کنیم.',
+      `برای چند برابر، ضرب می‌کنیم.`,
       `${eq(`${faDec(price, 1)} × ${fa(whole)}`)} = ${faDec(ans, 1)} هزار تومان`
     ]
   };
@@ -1245,11 +1494,12 @@ function genDecWord(diff) {
 genDecWord.levels = ['hard'];
 
 /* ============================================================
-   ۱۱) GENERATOR POOL
+   ۱۳) GENERATOR POOL
    ============================================================ */
 const Generators = {
   perimeter: [genSquarePerimeter, genRectPerimeter, genTrianglePerimeter, genCirclePerimeter, genParallelogramPerimeter, genRhombusPerimeter, genPolygonPerimeter, genFindSideFromPerimeter],
   area: [genSquareArea, genRectArea, genTriangleArea, genCircleArea, genParallelogramArea, genRhombusArea, genTrapezoidArea, genCompositeArea],
+  volume: [genCubeVolume, genBoxVolume, genFindEdgeFromVolume],
   fractions: [genFracAdd, genFracSub, genFracMul, genFracDiv, genFracSimplify, genFracCompare, genMixedToImproper, genWordFrac],
   decimals: [genDecAdd, genDecSub, genDecMul, genDecDiv, genDecCompare, genFracToDec, genDecToFrac, genDecWord]
 };
@@ -1258,21 +1508,22 @@ function generateQuestion(topic, difficulty) {
   const all = Generators[topic] || [];
   let pool = all.filter(g => g.levels && g.levels.includes(difficulty));
   if (!pool.length) pool = all;
+  if (!pool.length) return null;
   return pick(pool)(difficulty);
 }
 
 /* ============================================================
-   ۱۲) GAMIFICATION
+   ۱۴) GAMIFICATION
    ============================================================ */
 const BADGES = [
   { id: 'first', emoji: '🎯', name: 'اولین قدم', desc: 'اولین پاسخ درست' },
   { id: 'streak5', emoji: '🔥', name: '۵ تایی', desc: '۵ پاسخ درست پشت‌سرهم' },
   { id: 'streak10', emoji: '⚡', name: '۱۰ تایی', desc: '۱۰ پاسخ درست پشت‌سرهم' },
-  { id: 'coin100', emoji: '💰', name: 'پولدار', desc: '۱۰۰ سکه' },
-  { id: 'star20', emoji: '⭐', name: 'ستاره‌چین', desc: '۲۰ ستاره' },
-  { id: 'level5', emoji: '🏅', name: 'سطح ۵', desc: 'رسیدن به سطح ۵' },
+  { id: 'coin50', emoji: '💰', name: 'کیسه‌ی طلا', desc: '۵۰ سکه' },
+  { id: 'star10', emoji: '⭐', name: 'ستاره‌چین', desc: '۱۰ ستاره' },
+  { id: 'level3', emoji: '🏅', name: 'سطح ۳', desc: 'رسیدن به سطح ۳' },
   { id: 'master', emoji: '🧠', name: 'استاد', desc: '۲۰ پاسخ درست' },
-  { id: 'perfect', emoji: '💎', name: 'بی‌نقص', desc: 'آزمون ۱۰۰٪' }
+  { id: 'perfect', emoji: '💎', name: 'بی‌نقص', desc: 'آزمون با نمره‌ی ۱۰۰٪' }
 ];
 
 function awardCorrect(streak) {
@@ -1295,7 +1546,6 @@ function checkLevelUp() {
     showFloat(`🎉 تبریک! به سطح ${fa(newLevel)} رسیدی!`);
   }
 }
-/* ✅ FIXED: پیام تجمیعی برای نشان‌ها */
 function checkBadges() {
   const s = activeStudent();
   if (!s) return;
@@ -1309,13 +1559,12 @@ function checkBadges() {
   if (s.stats.totalCorrect >= 1) add('first');
   if (s.stats.bestStreak >= 5) add('streak5');
   if (s.stats.bestStreak >= 10) add('streak10');
-  if (s.stats.coins >= 100) add('coin100');
-  if (s.stats.stars >= 20) add('star20');
-  if (s.stats.level >= 5) add('level5');
+  if (s.stats.coins >= 50) add('coin50');
+  if (s.stats.stars >= 10) add('star10');
+  if (s.stats.level >= 3) add('level3');
   if (s.stats.totalCorrect >= 20) add('master');
   if (count > 0) showFloat(count === 1 ? '🏆 نشان جدید گرفتی!' : `🏆 ${fa(count)} نشان جدید!`);
 }
-/* ✅ FIXED: offset پویا برای جلوگیری از همپوشانی */
 let floatSlot = 0;
 function showFloat(text) {
   const offset = 80 + (floatSlot % 3) * 60;
@@ -1329,7 +1578,7 @@ function showFloat(text) {
 }
 
 /* ============================================================
-   ۱۳) ROUTER
+   ۱۵) ROUTER
    ============================================================ */
 let route = { name: 'home', params: {} };
 let session = null;
@@ -1337,8 +1586,7 @@ let examTimer = null;
 
 function navigate(name, params = {}) {
   if (examTimer) { clearInterval(examTimer); examTimer = null; }
-  /* ✅ FIXED: پاک کردن session در خروج از تمرین/آزمون */
-  if (session && (name === 'students' || name === 'addStudent' || name === 'home')) {
+  if (session && ['students', 'addStudent', 'home', 'profile'].includes(name)) {
     session = null;
   }
   route = { name, params };
@@ -1347,23 +1595,18 @@ function navigate(name, params = {}) {
 }
 
 /* ============================================================
-   ۱۴) COMMON
+   ۱۶) COMMON
    ============================================================ */
 const app = document.getElementById('app');
 
-/* ✅ FIXED: escHtml در title */
 function header(title, showBack = false) {
-  const s = activeStudent();
   return `
   <div class="top-bar">
     ${showBack
       ? `<button class="icon-btn back-btn" onclick="window.__goBack()" aria-label="بازگشت">➜</button>`
       : `<span style="width:44px"></span>`}
     <h1>${title}</h1>
-    <div class="chips">
-      ${s ? `<span class="chip" title="${escHtml(fullName(s))}">👤 ${fa(s.stats.coins)} 🪙</span>` : ''}
-      ${s ? `<span class="chip" title="ستاره">⭐ ${fa(s.stats.stars)}</span>` : ''}
-    </div>
+    <button class="icon-btn" onclick="window.__nav('profile')" aria-label="پروفایل">👤</button>
   </div>`;
 }
 
@@ -1372,9 +1615,9 @@ function bottomNav() {
     { id: 'home', ico: '🏠', label: 'خانه' },
     { id: 'perimeter', ico: '📏', label: 'محیط' },
     { id: 'area', ico: '📐', label: 'مساحت' },
+    { id: 'volume', ico: '🧊', label: 'حجم' },
     { id: 'fractions', ico: '🍰', label: 'کسر' },
-    { id: 'decimals', ico: '🔢', label: 'اعشار' },
-    { id: 'progress', ico: '📊', label: 'پیشرفت' }
+    { id: 'decimals', ico: '🔢', label: 'اعشار' }
   ];
   return `<nav class="bottom-nav" aria-label="ناوبری">${items.map(it => `
     <button class="nav-btn ${route.name === it.id ? 'active' : ''}" onclick="window.__nav('${it.id}')" aria-label="${it.label}">
@@ -1385,7 +1628,7 @@ function bottomNav() {
 }
 
 /* ============================================================
-   ۱۵) STUDENT MANAGEMENT
+   ۱۷) STUDENTS
    ============================================================ */
 function viewStudents() {
   const hasStudents = state.students.length > 0;
@@ -1393,19 +1636,19 @@ function viewStudents() {
   ${header('👥 دانش‌آموزان')}
   <div style="text-align:center;margin-bottom:20px">
     <div style="font-size:3.5rem">👨‍🎓</div>
-    <h2 style="margin:8px 0">${hasStudents ? 'یک دانش‌آموز را انتخاب کن' : 'خوش آمدی!'}</h2>
-    <p style="color:var(--muted);margin:0">${hasStudents ? 'برای شروع، یکی از پروفایل‌ها را انتخاب کن.' : 'برای شروع، اولین دانش‌آموز را اضافه کن.'}</p>
+    <h2 style="margin:8px 0">${hasStudents ? 'کدام دانش‌آموز؟' : 'خوش آمدی!'}</h2>
+    <p style="color:var(--muted);margin:0">${hasStudents ? 'روی اسم خودت بزن تا شروع کنیم.' : 'اول اسمت را وارد کن.'}</p>
   </div>
   ${hasStudents ? `
     <div class="grid">
       ${state.students.map(s => `
-        <div class="card student-card" onclick="window.__selectStudent('${s.id}')" role="button" tabindex="0">
-          <div class="student-avatar">${escHtml((s.name[0] || '؟'))}</div>
-          <div class="student-info">
-            <p class="student-name">${escHtml(fullName(s))}</p>
-            <p class="student-meta">پایه ${fa(s.grade)} — سطح ${fa(s.stats.level)} — ${fa(s.stats.totalCorrect)} پاسخ درست</p>
+        <div class="card" style="display:flex;align-items:center;gap:12px;padding:14px">
+          <div class="student-avatar" onclick="window.__selectStudent('${s.id}')" role="button" tabindex="0" style="cursor:pointer">${escHtml(s.name[0] || '؟')}</div>
+          <div class="student-info" onclick="window.__selectStudent('${s.id}')" role="button" tabindex="0" style="cursor:pointer;flex:1">
+            <p class="student-name" style="margin:0">${escHtml(fullName(s))}</p>
+            <p class="student-meta" style="margin:2px 0 0">پایه ${fa(s.grade)} — سطح ${fa(s.stats.level)}</p>
           </div>
-          <div style="color:var(--primary);font-size:1.4rem">➜</div>
+          <button class="delete-btn" onclick="event.stopPropagation();window.__deleteStudent('${s.id}')" aria-label="حذف ${escHtml(fullName(s))}">🗑️</button>
         </div>
       `).join('')}
     </div>
@@ -1420,18 +1663,18 @@ function viewAddStudent() {
   return `
   ${header('➕ دانش‌آموز جدید', true)}
   <div class="card">
-    <label style="display:block;margin-bottom:12px">
-      <span style="font-weight:600;font-size:.9rem">نام:</span>
-      <input type="text" id="stuName" class="num-input" style="text-align:right;font-size:1rem;font-weight:400" placeholder="مثلاً علی" maxlength="20">
+    <label style="display:block;margin-bottom:14px">
+      <span style="font-weight:600;font-size:.95rem">نام:</span>
+      <input type="text" id="stuName" class="num-input" style="text-align:right;font-size:1.05rem;font-weight:400;margin-top:6px" placeholder="مثلاً علی" maxlength="20">
     </label>
-    <label style="display:block;margin-bottom:12px">
-      <span style="font-weight:600;font-size:.9rem">نام خانوادگی:</span>
-      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-size:1rem;font-weight:400" placeholder="مثلاً محمدی" maxlength="20">
+    <label style="display:block;margin-bottom:14px">
+      <span style="font-weight:600;font-size:.95rem">نام خانوادگی (اختیاری):</span>
+      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-size:1.05rem;font-weight:400;margin-top:6px" placeholder="مثلاً محمدی" maxlength="20">
     </label>
-    <label style="display:block;margin-bottom:12px">
-      <span style="font-weight:600;font-size:.9rem">پایه تحصیلی:</span>
-      <select id="stuGrade" class="num-input" style="text-align:right">
-        ${[4, 5, 6, 7, 8, 9].map(g => `<option value="${g}" ${g === 6 ? 'selected' : ''}>پایه ${fa(g)}</option>`).join('')}
+    <label style="display:block;margin-bottom:14px">
+      <span style="font-weight:600;font-size:.95rem">پایه تحصیلی:</span>
+      <select id="stuGrade" class="num-input" style="text-align:right;margin-top:6px">
+        ${[4, 5, 6, 7, 8, 9].map(g => `<option value="${g}" ${g === 4 ? 'selected' : ''}>پایه ${fa(g)}</option>`).join('')}
       </select>
     </label>
   </div>
@@ -1442,75 +1685,103 @@ function viewAddStudent() {
 }
 
 /* ============================================================
-   ۱۶) HOME / TOPIC
+   ۱۸) HOME / PROFILE / TOPIC
    ============================================================ */
 function viewHome() {
-  const s = activeStudent();
   return `
   ${header('ریاضی‌یار 🎓')}
+  <p style="color:var(--muted);margin:0 0 12px;text-align:center">یک موضوع را انتخاب کن:</p>
   <div class="grid grid-2">
     <button class="card card-btn" onclick="window.__nav('perimeter')" aria-label="محیط">
       <span class="icon-big">📏</span>
       <h3 class="card-title">محیط</h3>
-      <p class="card-desc">دور شکل‌های هندسی</p>
+      <p class="card-desc">دور شکل‌ها</p>
     </button>
     <button class="card card-btn" onclick="window.__nav('area')" aria-label="مساحت">
       <span class="icon-big">📐</span>
       <h3 class="card-title">مساحت</h3>
-      <p class="card-desc">سطح داخل شکل‌ها</p>
+      <p class="card-desc">سطح شکل‌ها</p>
+    </button>
+    <button class="card card-btn" onclick="window.__nav('volume')" aria-label="حجم">
+      <span class="icon-big">🧊</span>
+      <h3 class="card-title">حجم</h3>
+      <p class="card-desc">داخل شکل‌های سه‌بعدی</p>
     </button>
     <button class="card card-btn" onclick="window.__nav('fractions')" aria-label="کسرها">
       <span class="icon-big">🍰</span>
       <h3 class="card-title">کسرها</h3>
-      <p class="card-desc">جمع، تفریق، ضرب و تقسیم</p>
+      <p class="card-desc">قسمت‌هایی از یک کل</p>
     </button>
     <button class="card card-btn" onclick="window.__nav('decimals')" aria-label="اعداد اعشاری">
       <span class="icon-big">🔢</span>
       <h3 class="card-title">اعداد اعشاری</h3>
-      <p class="card-desc">مفهوم، عملیات و تبدیل</p>
+      <p class="card-desc">با ممیز</p>
     </button>
-  </div>
-  <div style="margin-top:14px" class="grid grid-2">
     <button class="card card-btn" onclick="window.__nav('progress')" aria-label="پیشرفت">
       <span class="icon-big">📊</span>
       <h3 class="card-title">پیشرفت من</h3>
-      <p class="card-desc">نمودار و نشان‌ها</p>
-    </button>
-    <button class="card card-btn" onclick="window.__nav('students')" aria-label="تغییر دانش‌آموز">
-      <span class="icon-big">👥</span>
-      <h3 class="card-title">تغییر دانش‌آموز</h3>
-      <p class="card-desc">${s ? escHtml(fullName(s)) : '—'}</p>
-    </button>
-  </div>
-  <div style="margin-top:14px" class="grid grid-2">
-    <button class="card card-btn" onclick="window.__nav('teacher')" aria-label="معلم">
-      <span class="icon-big">👨‍🏫</span>
-      <h3 class="card-title">معلم / والد</h3>
-      <p class="card-desc">آزمون سفارشی</p>
-    </button>
-    <button class="card card-btn" onclick="window.__nav('settings')" aria-label="تنظیمات">
-      <span class="icon-big">⚙️</span>
-      <h3 class="card-title">تنظیمات</h3>
-      <p class="card-desc">صدا، سختی، اعداد</p>
+      <p class="card-desc">نمودار یادگیری</p>
     </button>
   </div>
   ${bottomNav()}`;
 }
 
+function viewProfile() {
+  const s = activeStudent();
+  if (!s) return `<div class="empty">دانش‌آموزی انتخاب نشده</div>`;
+  return `
+  ${header('👤 پروفایل من', true)}
+  <div class="profile-hero">
+    <div class="profile-avatar">${escHtml(s.name[0] || '؟')}</div>
+    <p class="profile-name">${escHtml(fullName(s))}</p>
+    <p class="profile-meta">پایه ${fa(s.grade)}</p>
+  </div>
+  <div class="card">
+    <h3 class="card-title">🏆 دستاوردهای من</h3>
+    <div class="stats-row">
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.level)}</div><div class="stat-label">سطح</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.coins)}</div><div class="stat-label">🪙 سکه</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.stars)}</div><div class="stat-label">⭐ ستاره</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.bestStreak)}</div><div class="stat-label">🔥 رکورد</div></div>
+    </div>
+    <p style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:12px">
+      ${fa(s.stats.totalCorrect)} پاسخ درست از ${fa(s.stats.totalQuestions)} سوال
+    </p>
+  </div>
+  <div class="card">
+    <h3 class="card-title">🎖️ نشان‌های من</h3>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">
+      ${BADGES.map(b => `
+        <div class="badge ${s.stats.badges.includes(b.id) ? 'earned' : 'locked'}" title="${b.desc}">
+          <span class="emoji">${b.emoji}</span>
+          <span class="name">${b.name}</span>
+        </div>`).join('')}
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:14px">
+    <button class="btn sec full" onclick="window.__nav('students')">🔄 تغییر دانش‌آموز</button>
+    <button class="btn info full" onclick="window.__nav('settings')">⚙️ تنظیمات</button>
+  </div>
+  ${bottomNav()}`;
+}
+
 function viewTopic(topic) {
-  const titles = { perimeter: '📏 محیط', area: '📐 مساحت', fractions: '🍰 کسرها', decimals: '🔢 اعداد اعشاری' };
+  const titles = {
+    perimeter: '📏 محیط', area: '📐 مساحت', volume: '🧊 حجم',
+    fractions: '🍰 کسرها', decimals: '🔢 اعداد اعشاری'
+  };
   return `
   ${header(titles[topic], true)}
   <div class="grid grid-2">
     <button class="card card-btn" onclick="window.__nav('learn', {topic:'${topic}'})" aria-label="آموزش">
       <span class="icon-big">📚</span>
       <h3 class="card-title">آموزش</h3>
-      <p class="card-desc">درسنامه کامل با مثال</p>
+      <p class="card-desc">با مثال‌های ساده</p>
     </button>
     <button class="card card-btn" onclick="window.__nav('practice', {topic:'${topic}'})" aria-label="تمرین">
       <span class="icon-big">✏️</span>
       <h3 class="card-title">تمرین</h3>
-      <p class="card-desc">سوال بی‌نهایت</p>
+      <p class="card-desc">سوال‌های بی‌پایان</p>
     </button>
     <button class="card card-btn" onclick="window.__nav('examSetup', {topic:'${topic}'})" aria-label="آزمون">
       <span class="icon-big">🎯</span>
@@ -1520,14 +1791,14 @@ function viewTopic(topic) {
     <button class="card card-btn" onclick="window.__nav('progress')" aria-label="پیشرفت">
       <span class="icon-big">📊</span>
       <h3 class="card-title">پیشرفت</h3>
-      <p class="card-desc">درصد تسلط</p>
+      <p class="card-desc">درصد یادگیری</p>
     </button>
   </div>
   ${bottomNav()}`;
 }
 
 /* ============================================================
-   ۱۷) LESSONS DATA (غنی)
+   ۱۹) LESSONS
    ============================================================ */
 const LESSONS = {
   perimeter: [
@@ -1535,217 +1806,158 @@ const LESSONS = {
       id: 'sq', title: 'مربع', emoji: '⬛',
       formula: 'محیط = ۴ × ضلع',
       paragraphs: [
-        'مربع شکلی است که چهار ضلع آن با هم مساوی‌اند و همه‌ی زوایایش قائمه (۹۰ درجه) هستند. محیط یعنی «دور تا دور» شکل.',
-        'چون هر چهار ضلع مربع با هم مساوی‌اند، برای محاسبه‌ی محیط کافی است طول یک ضلع را در ۴ ضرب کنیم.'
+        'مربع یک شکل زیبا است که ۴ ضلع دارد و همه‌ی ضلع‌هایش با هم مساوی‌اند. مثل کاشی، مثل صفحه‌ی شطرنج، مثل بعضی از پنجره‌ها.',
+        'وقتی می‌خواهیم دور یک مربع را اندازه بگیریم — مثلاً برای کشیدن نوار دور یک کاشی یا نرده‌کشی دور یک باغچه — به «محیط» احتیاج داریم. محیط یعنی «دور تا دور» شکل.',
+        'چون مربع ۴ ضلع مساوی دارد، اگر یک ضلع را بدانیم و آن را در ۴ ضرب کنیم، محیط به دست می‌آید. خیلی راحت!'
       ],
       examples: [
         {
-          text: 'مربعی با ضلع ۵ سانتی‌متر داریم. محیط آن چقدر است؟',
+          text: 'یک کاشی مربعی داریم که هر ضلعش ۳ سانتی‌متر است. دور تا دور کاشی چقدر است؟',
+          shape: Shapes.square(3),
+          steps: ['ضلع کاشی = ۳ سانتی‌متر', 'مربع ۴ ضلع دارد، پس: ۴ × ۳', 'جواب: ۴ × ۳ = ۱۲'],
+          answer: 'پس دور کاشی ۱۲ سانتی‌متر است.'
+        },
+        {
+          text: 'زمین بازی مدرسه به شکل مربع است و هر ضلعش ۶ متر است. اگر بخواهیم دور زمین را نرده بکشیم، چند متر نرده لازم داریم؟',
+          shape: Shapes.square(6),
+          steps: ['ضلع زمین = ۶ متر', 'محیط = ۴ × ۶', '۴ × ۶ = ۲۴'],
+          answer: 'پس ۲۴ متر نرده لازم است.'
+        },
+        {
+          text: 'یک سفره‌ی مربعی داریم که هر ضلعش ۵ سانتی‌متر است. برای دوخت نوار دور آن چقدر نوار لازم است؟',
           shape: Shapes.square(5),
-          steps: ['فرمول: محیط = ۴ × ضلع', 'محیط = ۴ × ۵', 'محیط = ۲۰'],
-          answer: 'محیط = ۲۰ سانتی‌متر'
+          steps: ['ضلع سفره = ۵ سانتی‌متر', 'محیط = ۴ × ۵', '۴ × ۵ = ۲۰'],
+          answer: 'پس ۲۰ سانتی‌متر نوار لازم است.'
         },
         {
-          text: 'زمین بازی مربعی به ضلع ۸ متر. اگر یک دور کامل دور آن بدویم، چند متر دویده‌ایم؟',
-          shape: Shapes.square(8),
-          steps: ['دور کامل = محیط مربع', 'محیط = ۴ × ۸', 'محیط = ۳۲'],
-          answer: '۳۲ متر دویده‌ایم'
-        },
-        {
-          text: 'محیط مربعی ۳۶ سانتی‌متر است. ضلع آن چقدر است؟',
+          text: 'برعکس! اگر محیط مربعی ۲۴ سانتی‌متر باشد، ضلعش چقدر است؟',
           shape: Shapes.square('?'),
-          steps: ['می‌دانیم: محیط = ۴ × ضلع', 'پس ضلع = محیط ÷ ۴', 'ضلع = ۳۶ ÷ ۴ = ۹'],
-          answer: 'ضلع = ۹ سانتی‌متر'
+          steps: ['می‌دانیم محیط = ۴ × ضلع', 'پس ضلع = محیط ÷ ۴', 'ضلع = ۲۴ ÷ ۴ = ۶'],
+          answer: 'پس ضلع = ۶ سانتی‌متر'
         }
       ],
       tips: [
-        'همیشه واحد اندازه‌گیری را در جواب بنویس.',
-        'اگر محیط را داری و ضلع را می‌خواهی، تقسیم بر ۴ کن.'
+        'محیط یعنی «دور تا دور» شکل. یادت باشد همیشه واحد (سانتی‌متر، متر و...) را در جواب بنویسی.',
+        'اگر محیط را داری و ضلع را می‌خواهی، محیط را بر ۴ تقسیم کن.'
       ],
       pitfalls: [
-        'اشتباه رایج: بعضی‌ها فکر می‌کنند محیط مربع = ضلع × ضلع. این فرمول مساحت است، نه محیط!'
+        'اشتباه نکن! مساحت مربع = ضلع × ضلع است، ولی محیط مربع = ۴ × ضلع. این دو با هم فرق دارند!'
       ]
     },
     {
       id: 'rect', title: 'مستطیل', emoji: '▭',
       formula: 'محیط = ۲ × (طول + عرض)',
       paragraphs: [
-        'مستطیل شکلی است با چهار ضلع که اضلاع روبه‌رو با هم مساوی و موازی‌اند.',
-        'برای محاسبه‌ی محیط، طول و عرض را با هم جمع می‌کنیم و حاصل را در ۲ ضرب می‌کنیم.'
+        'مستطیل شکلی است که ۴ ضلع دارد، ولی برخلاف مربع همه‌ی ضلع‌هایش با هم مساوی نیستند. مستطیل دو ضلع «طول» و دو ضلع «عرض» دارد.',
+        'اضلاع روبه‌رو در مستطیل با هم مساوی‌اند. یعنی طول چپ و راست با هم برابرند و عرض بالا و پایین هم با هم برابرند.',
+        'برای محیط مستطیل، اول طول و عرض را با هم جمع می‌کنیم، بعد جواب را در ۲ ضرب می‌کنیم. چرا؟ چون دو طول و دو عرض داریم!'
       ],
       examples: [
         {
-          text: 'مستطیلی با طول ۷ و عرض ۴ سانتی‌متر. محیط آن چقدر است؟',
-          shape: Shapes.rectangle(7, 4),
-          steps: ['فرمول: محیط = ۲ × (طول + عرض)', 'محیط = ۲ × (۷ + ۴)', 'محیط = ۲ × ۱۱ = ۲۲'],
-          answer: 'محیط = ۲۲ سانتی‌متر'
+          text: 'یک دفتر داریم که طولش ۵ سانتی‌متر و عرضش ۳ سانتی‌متر است. دور تا دور دفتر چقدر است؟',
+          shape: Shapes.rectangle(5, 3),
+          steps: ['طول = ۵، عرض = ۳', 'اول جمع: ۵ + ۳ = ۸', 'حالا در ۲ ضرب کن: ۲ × ۸ = ۱۶'],
+          answer: 'پس دور دفتر ۱۶ سانتی‌متر است.'
         },
         {
-          text: 'استخری مستطیلی به طول ۲۰ و عرض ۱۰ متر. برای نصب حفاظ دور آن چقدر حفاظ لازم است؟',
-          shape: Shapes.rectangle(20, 10),
-          steps: ['دور کامل = محیط', 'محیط = ۲ × (۲۰ + ۱۰)', 'محیط = ۲ × ۳۰ = ۶۰'],
-          answer: '۶۰ متر حفاظ لازم است'
+          text: 'استخری مستطیلی است به طول ۱۰ متر و عرض ۴ متر. برای نصب حفاظ دور استخر چقدر حفاظ لازم است؟',
+          shape: Shapes.rectangle(10, 4),
+          steps: ['طول = ۱۰، عرض = ۴', 'جمع: ۱۰ + ۴ = ۱۴', '۲ × ۱۴ = ۲۸'],
+          answer: 'پس ۲۸ متر حفاظ لازم است.'
         },
         {
-          text: 'محیط مستطیلی ۴۰ سانتی‌متر و طول آن ۱۲ است. عرض چقدر است؟',
-          steps: ['محیط = ۲ × (طول + عرض)', '۴۰ = ۲ × (۱۲ + عرض)', '۲۰ = ۱۲ + عرض', 'عرض = ۸'],
-          answer: 'عرض = ۸ سانتی‌متر'
+          text: 'یک زمین فوتبال به طول ۱۲ متر و عرض ۷ متر. یک دور کامل دور زمین چند متر است؟',
+          shape: Shapes.rectangle(12, 7),
+          steps: ['طول + عرض = ۱۲ + ۷ = ۱۹', 'محیط = ۲ × ۱۹ = ۳۸'],
+          answer: 'یک دور کامل = ۳۸ متر'
         }
       ],
       tips: [
-        'وقتی محیط را داری و یکی از اضلاع مجهول است، ابتدا محیط را بر ۲ تقسیم کن.',
-        'اضلاع روبه‌رو در مستطیل همیشه مساوی‌اند.'
+        'اضلاع روبه‌رو در مستطیل همیشه مساوی‌اند.',
+        'می‌شود طول و عرض را جابجا کرد، جواب فرقی نمی‌کند.'
       ],
       pitfalls: [
-        'اشتباه رایج: جمع کردن همه‌ی اضلاع به‌جای استفاده از فرمول ضرب در ۲.'
+        'اشتباه رایج: بعضی‌ها همه‌ی اضلاع را با هم جمع می‌کنند. نه! فقط از فرمول ۲ × (طول + عرض) استفاده کن.'
       ]
     },
     {
       id: 'tri', title: 'مثلث', emoji: '🔺',
       formula: 'محیط = ضلع۱ + ضلع۲ + ضلع۳',
       paragraphs: [
-        'مثلث شکلی است با سه ضلع و سه زاویه. برخلاف مربع و مستطیل، اضلاع مثلث می‌توانند هر اندازه‌ای داشته باشند.',
-        'محیط مثلث، مجموع طول سه ضلع آن است. همچنین نکته‌ی مهم این است که در هر مثلث، مجموع دو ضلع همیشه باید از ضلع سوم بزرگ‌تر باشد، وگرنه مثلث ساخته نمی‌شود.'
+        'مثلث شکلی است با ۳ ضلع و ۳ گوشه (زاویه). مثلث‌ها می‌توانند اندازه‌های مختلفی داشته باشند.',
+        'بعضی مثلث‌ها ۳ ضلع مساوی دارند (متساوی‌الاضلاع)، بعضی ۲ ضلع مساوی (متساوی‌الساقین) و بعضی هیچ ضلع مساوی ندارند.',
+        'برای محیط مثلث، فقط کافیست هر سه ضلع را با هم جمع کنیم. تمام!'
       ],
       examples: [
         {
-          text: 'مثلثی با اضلاع ۶، ۸ و ۱۰ سانتی‌متر. محیط آن چقدر است؟',
-          shape: Shapes.triangle(6, 8, 10),
-          steps: ['محیط = جمع سه ضلع', 'محیط = ۶ + ۸ + ۱۰', 'محیط = ۲۴'],
-          answer: 'محیط = ۲۴ سانتی‌متر'
+          text: 'مثلثی داریم با اضلاع ۳، ۴ و ۵ سانتی‌متر. دور تا دورش چقدر است؟',
+          shape: Shapes.triangle(3, 4, 5),
+          steps: ['سه ضلع داریم: ۳، ۴ و ۵', 'با هم جمع می‌کنیم: ۳ + ۴ = ۷، بعد ۷ + ۵ = ۱۲'],
+          answer: 'محیط = ۱۲ سانتی‌متر'
         },
         {
-          text: 'زمینی مثلثی با اضلاع ۱۵، ۲۰ و ۲۵ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
-          shape: Shapes.triangle(15, 20, 25),
-          steps: ['محیط = ۱۵ + ۲۰ + ۲۵', 'محیط = ۶۰'],
-          answer: '۶۰ متر نرده لازم است'
-        },
-        {
-          text: 'آیا می‌توان مثلثی با اضلاع ۳، ۴ و ۸ ساخت؟',
-          steps: ['شرط مثلث: مجموع دو ضلع > ضلع سوم', '۳ + ۴ = ۷ < ۸', 'پس این مثلث ساخته نمی‌شود!'],
-          answer: 'خیر، ساخته نمی‌شود'
+          text: 'زمینی مثلثی داریم با اضلاع ۶، ۷ و ۸ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
+          shape: Shapes.triangle(6, 7, 8),
+          steps: ['۶ + ۷ = ۱۳', '۱۳ + ۸ = ۲۱'],
+          answer: '۲۱ متر نرده لازم است.'
         }
       ],
       tips: [
-        'برای محاسبه‌ی محیط مثلث، فقط سه ضلع را با هم جمع کن.',
-        'اگر مجموع دو ضلع کوچک‌تر از ضلع بزرگ‌تر باشد، آن مثلث وجود ندارد.'
+        'همیشه حواست باشد مجموع دو ضلع کوچک از ضلع بزرگ‌تر بیشتر باشد، وگرنه آن مثلث ساخته نمی‌شود.'
       ],
       pitfalls: [
-        'اشتباه رایج: فکر می‌کنند همه‌ی اضلاع مثلث باید مساوی باشند. نه! مثلث می‌تواند اضلاع نامساوی داشته باشد.'
+        'اشتباه رایج: فکر کردن که همه‌ی مثلث‌ها باید ۳ ضلع مساوی داشته باشند. نه! اضلاع مثلث می‌توانند فرق کنند.'
       ]
     },
     {
       id: 'circ', title: 'دایره', emoji: '⚪',
       formula: 'محیط = ۲ × π × شعاع',
       paragraphs: [
-        'دایره مجموعه‌ای از نقاط است که همه‌شان از یک نقطه‌ی مرکزی به یک اندازه فاصله دارند. این فاصله را «شعاع» می‌نامیم. قطر = ۲ × شعاع.',
-        'محیط دایره از فرمول خاصی به دست می‌آید که در آن عدد ثابتی به‌نام π (پی) نقش دارد. مقدار π تقریباً ۳٫۱۴ است.'
+        'دایره یک شکل گرد است. فاصله‌ی مرکز دایره تا لبه‌ی آن را «شعاع» می‌گوییم.',
+        'اگر از یک طرف دایره به طرف دیگر از وسط بگذریم، به آن «قطر» می‌گویند. قطر = ۲ × شعاع.',
+        'برای محاسبه‌ی محیط دایره، از عدد مخصوصی به نام «پی» (π) استفاده می‌کنیم. مقدار آن تقریباً ۳٫۱۴ است.'
       ],
       examples: [
         {
-          text: 'دایره‌ای با شعاع ۵ سانتی‌متر. محیط آن چقدر است؟ (π ≈ ۳٫۱۴)',
-          shape: Shapes.circle(5),
-          steps: ['فرمول: محیط = ۲ × π × شعاع', 'محیط = ۲ × ۳٫۱۴ × ۵', 'محیط = ۳۱٫۴'],
-          answer: 'محیط ≈ ۳۱٫۴ سانتی‌متر'
+          text: 'دایره‌ای داریم با شعاع ۲ سانتی‌متر. محیطش چقدر است؟',
+          shape: Shapes.circle(2),
+          steps: ['شعاع = ۲', 'فرمول: ۲ × پی × شعاع', '۲ × ۳٫۱۴ × ۲ = ۱۲٫۵۶'],
+          answer: 'محیط ≈ ۱۲٫۵۶ سانتی‌متر'
         },
         {
-          text: 'دایره‌ای به قطر ۱۰ متر. محیط آن چقدر است؟',
-          shape: Shapes.circle(5),
-          steps: ['قطر = ۱۰، پس شعاع = ۵', 'محیط = ۲ × ۳٫۱۴ × ۵', 'محیط = ۳۱٫۴'],
-          answer: 'محیط ≈ ۳۱٫۴ متر'
+          text: 'دایره‌ای به قطر ۶ متر. محیطش چقدر است؟',
+          shape: Shapes.circle(3),
+          steps: ['قطر = ۶، پس شعاع = ۳', 'محیط = ۲ × ۳٫۱۴ × ۳', '۲ × ۳٫۱۴ × ۳ = ۱۸٫۸۴'],
+          answer: 'محیط ≈ ۱۸٫۸۴ متر'
         }
       ],
-      tips: [
-        'اگر قطر را داری، اول آن را بر ۲ تقسیم کن تا شعاع به دست بیاید.',
-        'در جواب‌ها به‌جای π عدد ۳٫۱۴ بگذار.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: استفاده از قطر به‌جای شعاع در فرمول.'
-      ]
-    },
-    {
-      id: 'para', title: 'متوازی‌الاضلاع', emoji: '▱',
-      formula: 'محیط = ۲ × (ضلع بزرگ + ضلع کوچک)',
-      paragraphs: [
-        'متوازی‌الاضلاع شکلی چهارضلعی است که اضلاع روبه‌روی آن موازی و مساوی‌اند، ولی زوایایش قائمه نیستند.',
-        'چون اضلاع روبه‌رو مساوی‌اند، محیط برابر است با دو برابر مجموع دو ضلع مجاور.'
-      ],
-      examples: [
-        {
-          text: 'متوازی‌الاضلاعی با اضلاع ۹ و ۶ سانتی‌متر. محیط آن چقدر است؟',
-          shape: Shapes.parallelogram(9, 6),
-          steps: ['محیط = ۲ × (ضلع بزرگ + ضلع کوچک)', 'محیط = ۲ × (۹ + ۶)', 'محیط = ۳۰'],
-          answer: 'محیط = ۳۰ سانتی‌متر'
-        },
-        {
-          text: 'زمین کشاورزی متوازی‌الاضلاع با اضلاع ۱۲ و ۸ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
-          shape: Shapes.parallelogram(12, 8),
-          steps: ['محیط = ۲ × (۱۲ + ۸)', 'محیط = ۲ × ۲۰ = ۴۰'],
-          answer: '۴۰ متر نرده لازم است'
-        }
-      ],
-      tips: [
-        'برای محیط، ارتفاع و زوایا نقشی ندارند — فقط دو ضلع مجاور را لازم داری.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: قاطی کردن اضلاع با ارتفاع. ارتفاع برای مساحت لازم است، نه محیط.'
-      ]
-    },
-    {
-      id: 'rhom', title: 'لوزی', emoji: '◆',
-      formula: 'محیط = ۴ × ضلع',
-      paragraphs: [
-        'لوزی یک متوازی‌الاضلاع خاص است که همه‌ی اضلاعش با هم مساوی‌اند. مثل یک مربع که کج شده باشد.',
-        'چون هر چهار ضلع لوزی برابرند، محیط آن هم مانند مربع از فرمول ۴ × ضلع به دست می‌آید.'
-      ],
-      examples: [
-        {
-          text: 'لوزی به ضلع ۶ سانتی‌متر. محیط آن چقدر است؟',
-          shape: Shapes.rhombusSide(6),
-          steps: ['فرمول: محیط = ۴ × ضلع', 'محیط = ۴ × ۶', 'محیط = ۲۴'],
-          answer: 'محیط = ۲۴ سانتی‌متر'
-        },
-        {
-          text: 'باغچه‌ای لوزی‌شکل به ضلع ۵ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
-          shape: Shapes.rhombusSide(5),
-          steps: ['محیط = ۴ × ۵', 'محیط = ۲۰'],
-          answer: '۲۰ متر نرده لازم است'
-        }
-      ],
-      tips: [
-        'قطرهای لوزی برای محاسبه‌ی مساحت لازم‌اند، ولی برای محیط فقط ضلع را لازم داری.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: استفاده از قطرها برای محاسبه‌ی محیط.'
-      ]
+      tips: ['همیشه به‌جای پی، عدد ۳٫۱۴ را بگذار.'],
+      pitfalls: ['اشتباه نکن! اگر قطر داری، اول بر ۲ تقسیم کن تا شعاع به دست آید.']
     },
     {
       id: 'poly', title: 'چندضلعی منتظم', emoji: '⬟',
-      formula: 'محیط = تعداد ضلع × طول یک ضلع',
+      formula: 'محیط = تعداد ضلع × ضلع',
       paragraphs: [
-        'چندضلعی منتظم شکلی است که همه‌ی اضلاعش مساوی و همه‌ی زوایایش برابرند.',
-        'برای محاسبه‌ی محیط، فقط کافی است تعداد ضلع‌ها را در طول یک ضلع ضرب کنیم.'
+        'چندضلعی منتظم یعنی شکلی که همه‌ی ضلع‌هایش مساوی‌اند و همه‌ی زوایایش برابر. مثل مثلث متساوی‌الاضلاع، مربع، پنج‌ضلعی منتظم و شش‌ضلعی منتظم.',
+        'اسم شکل به تو می‌گوید چند ضلع دارد: پنج‌ضلعی یعنی ۵ ضلع، شش‌ضلعی یعنی ۶ ضلع، هشت‌ضلعی یعنی ۸ ضلع.',
+        'برای محیط، تعداد ضلع‌ها را در طول یک ضلع ضرب می‌کنیم.'
       ],
       examples: [
         {
-          text: 'شش‌ضلعی منتظمی با ضلع ۵ سانتی‌متر. محیط آن چقدر است؟',
-          shape: Shapes.regularPolygon(6, 5),
-          steps: ['تعداد ضلع = ۶', 'محیط = ۶ × ۵', 'محیط = ۳۰'],
-          answer: 'محیط = ۳۰ سانتی‌متر'
+          text: 'شش‌ضلعی منتظمی داریم که هر ضلعش ۳ سانتی‌متر است. محیطش چقدر است؟',
+          shape: Shapes.regularPolygon(6, 3),
+          steps: ['شش‌ضلعی یعنی ۶ ضلع', 'محیط = ۶ × ۳', '= ۱۸'],
+          answer: 'محیط = ۱۸ سانتی‌متر'
         },
         {
-          text: 'باغ گلی پنج‌ضلعی منتظم به ضلع ۴ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
+          text: 'باغ گلی به شکل پنج‌ضلعی منتظم است و هر ضلعش ۴ متر است. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
           shape: Shapes.regularPolygon(5, 4),
-          steps: ['تعداد ضلع = ۵', 'محیط = ۵ × ۴', 'محیط = ۲۰'],
-          answer: '۲۰ متر نرده لازم است'
+          steps: ['پنج‌ضلعی یعنی ۵ ضلع', 'محیط = ۵ × ۴ = ۲۰'],
+          answer: '۲۰ متر نرده لازم است.'
         }
       ],
-      tips: [
-        'نام شکل به تو می‌گوید چند ضلع دارد: پنج‌ضلعی = ۵، شش‌ضلعی = ۶، هشت‌ضلعی = ۸.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فراموش کردن تعداد ضلع.'
-      ]
+      tips: ['تعداد ضلع را از روی نام شکل پیدا کن: پنج = ۵، شش = ۶، هشت = ۸.'],
+      pitfalls: ['اشتباه نکن! تعداد ضلع را فراموش نکن.']
     }
   ],
   area: [
@@ -1753,468 +1965,585 @@ const LESSONS = {
       id: 'sq', title: 'مربع', emoji: '⬛',
       formula: 'مساحت = ضلع × ضلع',
       paragraphs: [
-        'مساحت یعنی مقدار سطحی که شکل اشغال می‌کند. برخلاف محیط که «دور تا دور» را می‌سنجد، مساحت «درون» شکل را اندازه می‌گیرد.',
-        'برای مربع، مساحت با ضرب ضلع در خودش به دست می‌آید.'
+        'مساحت یعنی چقدر «سطح» در داخل شکل جا می‌شود. مثلاً یک اتاق را در نظر بگیر: مساحت یعنی کف اتاق چقدر بزرگ است.',
+        'مساحت را با «واحد مربع» می‌سنجیم. مثلاً سانتی‌متر مربع یعنی یک مربع کوچک یک‌در‌یک سانتی‌متری.',
+        'برای مساحت مربع، ضلع را در خودش ضرب می‌کنیم. مثلاً اگر ضلع ۴ باشد، مساحت = ۴ × ۴ = ۱۶.'
       ],
       examples: [
         {
-          text: 'مربعی با ضلع ۶ سانتی‌متر. مساحت آن چقدر است؟',
-          shape: Shapes.square(6),
-          steps: ['فرمول: مساحت = ضلع × ضلع', 'مساحت = ۶ × ۶', 'مساحت = ۳۶'],
-          answer: 'مساحت = ۳۶ سانتی‌متر مربع'
+          text: 'یک کاشی مربعی داریم با ضلع ۳ سانتی‌متر. مساحتش چقدر است؟',
+          shape: Shapes.square(3),
+          steps: ['ضلع = ۳', 'مساحت = ضلع × ضلع', '۳ × ۳ = ۹'],
+          answer: 'مساحت = ۹ سانتی‌متر مربع'
         },
         {
-          text: 'اتاقی مربعی به ضلع ۴ متر. برای سنگ‌فرش آن چند متر مربع سنگ لازم است؟',
+          text: 'اتاقی مربعی داریم با ضلع ۴ متر. برای سنگ‌فرش کردن کف اتاق چند متر مربع سنگ لازم است؟',
           shape: Shapes.square(4),
-          steps: ['مساحت = ۴ × ۴', 'مساحت = ۱۶'],
-          answer: '۱۶ متر مربع سنگ لازم است'
+          steps: ['ضلع = ۴', 'مساحت = ۴ × ۴ = ۱۶'],
+          answer: '۱۶ متر مربع سنگ لازم است.'
         },
         {
-          text: 'مساحت مربعی ۴۹ سانتی‌متر مربع است. ضلع آن چقدر است؟',
+          text: 'برعکس! اگر مساحت مربعی ۲۵ سانتی‌متر مربع باشد، ضلعش چقدر است؟',
           shape: Shapes.square('?'),
-          steps: ['مساحت = ضلع²', '۴۹ = ضلع²', 'ضلع = √۴۹ = ۷'],
-          answer: 'ضلع = ۷ سانتی‌متر'
+          steps: [
+            'می‌دانیم مساحت = ضلع × ضلع',
+            'پس ضلع = ریشه‌ی دومِ مساحت',
+            'چه عددی در خودش ضرب شود ۲۵ می‌شود؟ جواب ۵ است.'
+          ],
+          answer: 'پس ضلع = ۵ سانتی‌متر'
         }
       ],
       tips: [
         'واحد مساحت همیشه «مربع» دارد: سانتی‌متر مربع، متر مربع.',
         'برای پیدا کردن ضلع از مساحت، جذر بگیر.'
       ],
-      pitfalls: [
-        'اشتباه رایج: اشتباه گرفتن محیط و مساحت.'
-      ]
+      pitfalls: ['اشتباه نکن! محیط مربع = ۴ × ضلع، ولی مساحت = ضلع × ضلع.']
     },
     {
       id: 'rect', title: 'مستطیل', emoji: '▭',
       formula: 'مساحت = طول × عرض',
       paragraphs: [
-        'مساحت مستطیل با ضرب طول در عرض به دست می‌آید.',
-        'این فرمول خیلی کاربردی است — مثلاً برای حساب کردن متراژ یک اتاق یا اندازه‌ی زمین کشاورزی.'
+        'برای مساحت مستطیل، طول را در عرض ضرب می‌کنیم. به همین راحتی!',
+        'این فرمول خیلی به‌کار می‌آید. مثلاً برای حساب کردن متراژ یک اتاق، اندازه‌ی زمین کشاورزی، یا مقدار کاغذی که برای پوشاندن یک جعبه لازم است.'
       ],
       examples: [
         {
-          text: 'مستطیلی با طول ۷ و عرض ۴. مساحت آن چقدر است؟',
-          shape: Shapes.rectangle(7, 4),
-          steps: ['فرمول: مساحت = طول × عرض', 'مساحت = ۷ × ۴', 'مساحت = ۲۸'],
-          answer: 'مساحت = ۲۸ سانتی‌متر مربع'
+          text: 'یک دفتر مشق داریم به طول ۵ و عرض ۳ سانتی‌متر. مساحت جلد آن چقدر است؟',
+          shape: Shapes.rectangle(5, 3),
+          steps: ['طول = ۵، عرض = ۳', 'مساحت = ۵ × ۳ = ۱۵'],
+          answer: 'مساحت = ۱۵ سانتی‌متر مربع'
         },
         {
-          text: 'زمین فوتبالی به طول ۱۰۰ و عرض ۶۰ متر. مساحتش چقدر است؟',
-          shape: Shapes.rectangle(100, 60),
-          steps: ['مساحت = ۱۰۰ × ۶۰', 'مساحت = ۶۰۰۰'],
-          answer: 'مساحت = ۶۰۰۰ متر مربع'
+          text: 'زمین فوتبالی به طول ۱۲ متر و عرض ۶ متر. مساحتش چقدر است؟',
+          shape: Shapes.rectangle(12, 6),
+          steps: ['مساحت = ۱۲ × ۶', '۱۲ × ۶ = ۷۲'],
+          answer: 'مساحت = ۷۲ متر مربع'
         },
         {
-          text: 'جلد کتابی به طول ۲۴ و عرض ۱۷ سانتی‌متر. مساحت جلد چقدر است؟',
-          shape: Shapes.rectangle(24, 17),
-          steps: ['مساحت = ۲۴ × ۱۷', 'مساحت = ۴۰۸'],
-          answer: 'مساحت = ۴۰۸ سانتی‌متر مربع'
+          text: 'یک باغچه به طول ۸ و عرض ۳ متر. برای کاشتن گل، چند متر مربع زمین لازم است؟',
+          shape: Shapes.rectangle(8, 3),
+          steps: ['مساحت = ۸ × ۳', '= ۲۴'],
+          answer: '۲۴ متر مربع زمین لازم است.'
         }
       ],
-      tips: [
-        'طول و عرض را می‌شود جابجا کرد — نتیجه یکی است.',
-        'اگر مساحت و یک ضلع را داری، ضلع دیگر = مساحت ÷ ضلع معلوم.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: جمع کردن طول و عرض به‌جای ضرب کردن.'
-      ]
+      tips: ['طول و عرض را می‌توانی جابجا کنی، جواب فرقی نمی‌کند.'],
+      pitfalls: ['اشتباه نکن! به‌جای ضرب کردن، طول و عرض را جمع نکن.']
     },
     {
       id: 'tri', title: 'مثلث', emoji: '🔺',
       formula: 'مساحت = (قاعده × ارتفاع) ÷ ۲',
       paragraphs: [
-        'مساحت مثلث نصف مساحت مستطیلی است که مثلث در آن جا می‌شود.',
-        '«قاعده» یکی از اضلاع است و «ارتفاع» فاصله‌ی عمودی از رأس مقابل تا آن قاعده.'
+        'مساحت مثلث نصفِ مساحت مستطیلی است که مثلث در آن جا می‌شود. به همین خاطر در آخر کار، تقسیم بر ۲ می‌کنیم.',
+        'قاعده یعنی یکی از اضلاع مثلث (معمولاً پایین). ارتفاع یعنی فاصله‌ی عمودی از گوشه‌ی بالایی تا آن قاعده.',
+        'برای مساحت: اول قاعده را در ارتفاع ضرب می‌کنیم، بعد بر ۲ تقسیم می‌کنیم.'
       ],
       examples: [
         {
-          text: 'مثلثی با قاعده ۸ و ارتفاع ۵. مساحت آن چقدر است؟',
-          shape: Shapes.triangleBH(8, 5),
-          steps: ['فرمول: مساحت = (قاعده × ارتفاع) ÷ ۲', 'مساحت = (۸ × ۵) ÷ ۲', 'مساحت = ۴۰ ÷ ۲ = ۲۰'],
-          answer: 'مساحت = ۲۰ سانتی‌متر مربع'
+          text: 'مثلثی داریم با قاعده ۴ و ارتفاع ۳. مساحتش چقدر است؟',
+          shape: Shapes.triangleBH(4, 3),
+          steps: ['اول ضرب: ۴ × ۳ = ۱۲', 'حالا بر ۲ تقسیم: ۱۲ ÷ ۲ = ۶'],
+          answer: 'مساحت = ۶ سانتی‌متر مربع'
         },
         {
-          text: 'تابلوی مثلثی با قاعده ۱۰ و ارتفاع ۶ متر. مساحتش چقدر است؟',
-          shape: Shapes.triangleBH(10, 6),
-          steps: ['مساحت = (۱۰ × ۶) ÷ ۲', 'مساحت = ۶۰ ÷ ۲ = ۳۰'],
-          answer: 'مساحت = ۳۰ متر مربع'
+          text: 'یک بیرق مثلثی داریم با قاعده ۶ و ارتفاع ۴ سانتی‌متر. مساحتش چقدر است؟',
+          shape: Shapes.triangleBH(6, 4),
+          steps: ['۶ × ۴ = ۲۴', '۲۴ ÷ ۲ = ۱۲'],
+          answer: 'مساحت = ۱۲ سانتی‌متر مربع'
         }
       ],
-      tips: [
-        'ارتفاع همیشه عمود بر قاعده است (زاویه‌ی ۹۰ درجه).'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فراموش کردن تقسیم بر ۲.'
-      ]
+      tips: ['ارتفاع همیشه عمود بر قاعده است (زاویه‌ی ۹۰ درجه).'],
+      pitfalls: ['اشتباه رایج: یادت باشد در آخر بر ۲ تقسیم کنی. اگر نکنی، جواب ۲ برابر می‌شود.']
     },
     {
       id: 'circ', title: 'دایره', emoji: '⚪',
-      formula: 'مساحت = π × شعاع²',
+      formula: 'مساحت = π × شعاع × شعاع',
       paragraphs: [
-        'برای محاسبه‌ی سطح داخل دایره، از فرمول π × شعاع² استفاده می‌کنیم.',
-        'دقت کن که شعاع² یعنی شعاع × شعاع، نه ۲ × شعاع!'
+        'برای مساحت دایره، از فرمول مخصوص استفاده می‌کنیم: پی ضرب‌در شعاع ضرب‌در شعاع.',
+        'شعاع همان فاصله‌ی مرکز تا لبه‌ی دایره است. دقت کن که «شعاع × شعاع» نه «۲ × شعاع»!'
       ],
       examples: [
         {
-          text: 'دایره‌ای با شعاع ۳ سانتی‌متر. مساحت آن چقدر است؟',
-          shape: Shapes.circle(3),
-          steps: ['مساحت = π × شعاع²', 'مساحت = ۳٫۱۴ × ۳²', 'مساحت = ۳٫۱۴ × ۹ = ۲۸٫۲۶'],
-          answer: 'مساحت ≈ ۲۸٫۲۶ سانتی‌متر مربع'
+          text: 'دایره‌ای داریم با شعاع ۲ سانتی‌متر. مساحتش چقدر است؟',
+          shape: Shapes.circle(2),
+          steps: [
+            'شعاع = ۲',
+            'فرمول: پی × شعاع × شعاع',
+            '۳٫۱۴ × ۲ × ۲ = ۳٫۱۴ × ۴ = ۱۲٫۵۶'
+          ],
+          answer: 'مساحت ≈ ۱۲٫۵۶ سانتی‌متر مربع'
         },
         {
-          text: 'پیتزایی دایره‌ای به شعاع ۱۰ سانتی‌متر. مساحت آن چقدر است؟',
-          shape: Shapes.circle(10),
-          steps: ['مساحت = ۳٫۱۴ × ۱۰²', 'مساحت = ۳٫۱۴ × ۱۰۰ = ۳۱۴'],
-          answer: 'مساحت = ۳۱۴ سانتی‌متر مربع'
+          text: 'یک پیتزای دایره‌ای داریم به شعاع ۵ سانتی‌متر. مساحتش چقدر است؟',
+          shape: Shapes.circle(5),
+          steps: ['۳٫۱۴ × ۵ × ۵', '۳٫۱۴ × ۲۵ = ۷۸٫۵'],
+          answer: 'مساحت ≈ ۷۸٫۵ سانتی‌متر مربع'
         }
       ],
-      tips: [
-        'دقت کن که شعاع² با ۲ × شعاع فرق دارد. مثلاً ۳² = ۹، نه ۶!',
-        'اگر قطر داری، اول تقسیم بر ۲ کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: استفاده از قطر به‌جای شعاع، یا محاسبه‌ی ۲ × شعاع به‌جای شعاع².'
-      ]
+      tips: ['دقت کن! شعاع ضرب‌در شعاع با ۲ × شعاع فرق دارد. مثلاً ۳ × ۳ = ۹، نه ۶!'],
+      pitfalls: ['اشتباه نکن! اگر قطر داری، اول بر ۲ تقسیم کن تا شعاع به دست بیاید.']
     },
     {
       id: 'para', title: 'متوازی‌الاضلاع', emoji: '▱',
       formula: 'مساحت = قاعده × ارتفاع',
       paragraphs: [
-        'مساحت متوازی‌الاضلاع، دقیقاً مانند مستطیل، با ضرب قاعده در ارتفاع به دست می‌آید.',
-        'ارتفاع همان فاصله‌ی عمودی بین دو قاعده‌ی موازی است، نه ضلع کج.'
+        'متوازی‌الاضلاع شبیه مستطیل است، ولی کج شده! اضلاع روبه‌رو موازی و مساوی‌اند.',
+        'برای مساحت متوازی‌الاضلاع، از قاعده و ارتفاع استفاده می‌کنیم. قاعده یکی از اضلاع پایین است، ارتفاع فاصله‌ی عمودی بین دو قاعده‌ی موازی.'
       ],
       examples: [
         {
-          text: 'متوازی‌الاضلاعی با قاعده ۶ و ارتفاع ۴. مساحت آن چقدر است؟',
-          shape: Shapes.parallelogram(6, 10, 4),
-          steps: ['فرمول: مساحت = قاعده × ارتفاع', 'مساحت = ۶ × ۴', 'مساحت = ۲۴'],
-          answer: 'مساحت = ۲۴ سانتی‌متر مربع'
+          text: 'متوازی‌الاضلاعی داریم با قاعده ۵ و ارتفاع ۳. مساحتش چقدر است؟',
+          shape: Shapes.parallelogram(5, 8, 3),
+          steps: ['مساحت = قاعده × ارتفاع', '۵ × ۳ = ۱۵'],
+          answer: 'مساحت = ۱۵ سانتی‌متر مربع'
         },
         {
-          text: 'زمین کشاورزی متوازی‌الاضلاع با قاعده ۲۰ و ارتفاع ۱۵ متر. مساحت آن چقدر است؟',
-          shape: Shapes.parallelogram(20, 12, 15),
-          steps: ['مساحت = ۲۰ × ۱۵', 'مساحت = ۳۰۰'],
-          answer: 'مساحت = ۳۰۰ متر مربع'
+          text: 'زمین کشاورزی متوازی‌الاضلاع با قاعده ۹ و ارتفاع ۴ متر. مساحتش چقدر است؟',
+          shape: Shapes.parallelogram(9, 8, 4),
+          steps: ['مساحت = ۹ × ۴ = ۳۶'],
+          answer: 'مساحت = ۳۶ متر مربع'
         }
       ],
-      tips: [
-        'ارتفاع همیشه عمود بر قاعده است.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: ضرب کردن دو ضلع مجاور به‌جای قاعده در ارتفاع.'
-      ]
+      tips: ['برای مساحت، فقط به قاعده و ارتفاع نیاز داری. ضلع کج را قاطی نکن!'],
+      pitfalls: ['اشتباه نکن! ارتفاع همیشه عمود بر قاعده است.']
     },
     {
       id: 'rhom', title: 'لوزی', emoji: '◆',
-      formula: 'مساحت = (قطر بزرگ × قطر کوچک) ÷ ۲',
+      formula: 'مساحت = (قطر۱ × قطر۲) ÷ ۲',
       paragraphs: [
-        'لوزی دو قطر دارد که عمود بر هم هستند و یکدیگر را نصف می‌کنند.',
-        'مساحت لوزی نصف حاصل‌ضرب دو قطر است.'
+        'لوزی یک چهارضلعی است که همه‌ی ضلع‌هایش مساوی‌اند، ولی زوایایش قائمه نیستند. مثل یک مربع کج‌شده.',
+        'لوزی دو قطر دارد که عمود بر هم هستند (زاویه‌ی ۹۰ درجه). برای مساحت، قطرها را در هم ضرب می‌کنیم و بر ۲ تقسیم می‌کنیم.'
       ],
       examples: [
         {
-          text: 'لوزی با قطرهای ۸ و ۶. مساحت آن چقدر است؟',
-          shape: Shapes.rhombusD(8, 6),
-          steps: ['فرمول: مساحت = (قطر۱ × قطر۲) ÷ ۲', 'مساحت = (۸ × ۶) ÷ ۲', 'مساحت = ۴۸ ÷ ۲ = ۲۴'],
-          answer: 'مساحت = ۲۴ سانتی‌متر مربع'
+          text: 'لوزی داریم با قطرهای ۴ و ۶ سانتی‌متر. مساحتش چقدر است؟',
+          shape: Shapes.rhombusD(4, 6),
+          steps: ['اول ضرب قطرها: ۴ × ۶ = ۲۴', 'حالا بر ۲ تقسیم: ۲۴ ÷ ۲ = ۱۲'],
+          answer: 'مساحت = ۱۲ سانتی‌متر مربع'
         },
         {
-          text: 'باغچه‌ای لوزی‌شکل با قطرهای ۱۲ و ۱۰ متر. مساحتش چقدر است؟',
-          shape: Shapes.rhombusD(12, 10),
-          steps: ['مساحت = (۱۲ × ۱۰) ÷ ۲', 'مساحت = ۱۲۰ ÷ ۲ = ۶۰'],
-          answer: 'مساحت = ۶۰ متر مربع'
+          text: 'باغچه‌ای لوزی‌شکل داریم با قطرهای ۸ و ۴ متر. مساحتش چقدر است؟',
+          shape: Shapes.rhombusD(8, 4),
+          steps: ['۸ × ۴ = ۳۲', '۳۲ ÷ ۲ = ۱۶'],
+          answer: 'مساحت = ۱۶ متر مربع'
         }
       ],
-      tips: [
-        'قطرها را می‌شود جابجا کرد — نتیجه یکی است.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: ضرب کردن قطرها بدون تقسیم بر ۲.'
-      ]
+      tips: ['یادت باشد در انتها بر ۲ تقسیم کنی.'],
+      pitfalls: ['اشتباه نکن! فراموش نکن تقسیم بر ۲ را.']
     },
     {
       id: 'trap', title: 'ذوزنقه', emoji: '⏢',
       formula: 'مساحت = ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲',
       paragraphs: [
-        'ذوزنقه شکلی چهارضلعی است که فقط دو ضلع آن موازی‌اند. به این دو ضلع موازی، «قاعده» می‌گویند.',
-        'فرمول: میانگین دو قاعده را حساب می‌کنیم (جمع و تقسیم بر ۲) و در ارتفاع ضرب می‌کنیم.'
+        'ذوزنقه شکل جالبی است: فقط دو ضلعش موازی‌اند. به این دو ضلع، «قاعده‌ی کوچک» و «قاعده‌ی بزرگ» می‌گویند.',
+        'برای مساحت، اول دو قاعده را با هم جمع می‌کنیم، بعد در ارتفاع ضرب می‌کنیم، بعد بر ۲ تقسیم می‌کنیم.'
       ],
       examples: [
         {
-          text: 'ذوزنقه‌ای با قاعده‌های ۱۰ و ۶ و ارتفاع ۴. مساحت آن چقدر است؟',
-          shape: Shapes.trapezoid(10, 6, 4),
-          steps: ['فرمول: ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲', 'مساحت = ((۶ + ۱۰) × ۴) ÷ ۲', 'مساحت = (۱۶ × ۴) ÷ ۲ = ۳۲'],
-          answer: 'مساحت = ۳۲ سانتی‌متر مربع'
+          text: 'ذوزنقه‌ای داریم با قاعده‌ی کوچک ۳، قاعده‌ی بزرگ ۵ و ارتفاع ۴. مساحتش چقدر است؟',
+          shape: Shapes.trapezoid(5, 3, 4),
+          steps: ['جمع دو قاعده: ۳ + ۵ = ۸', 'ضرب در ارتفاع: ۸ × ۴ = ۳۲', 'تقسیم بر ۲: ۳۲ ÷ ۲ = ۱۶'],
+          answer: 'مساحت = ۱۶ سانتی‌متر مربع'
         },
         {
-          text: 'زمینی ذوزنقه‌ای با قاعده‌های ۲۰ و ۱۲ و ارتفاع ۸ متر. مساحت آن چقدر است؟',
-          shape: Shapes.trapezoid(20, 12, 8),
-          steps: ['مساحت = ((۱۲ + ۲۰) × ۸) ÷ ۲', 'مساحت = (۳۲ × ۸) ÷ ۲ = ۱۲۸'],
-          answer: 'مساحت = ۱۲۸ متر مربع'
+          text: 'یک تکه زمین ذوزنقه‌ای داریم با قاعده‌های ۶ و ۴ و ارتفاع ۵ متر. مساحتش چقدر است؟',
+          shape: Shapes.trapezoid(6, 4, 5),
+          steps: ['جمع: ۶ + ۴ = ۱۰', '۱۰ × ۵ = ۵۰', '۵۰ ÷ ۲ = ۲۵'],
+          answer: 'مساحت = ۲۵ متر مربع'
         }
       ],
-      tips: [
-        'قاعده بزرگ‌تر را با قاعده کوچک‌تر جمع می‌کنیم.',
-        'ارتفاع باید عمود بر دو قاعده باشد.'
+      tips: ['دو قاعده را با هم جمع می‌کنیم (نه تفریق).'],
+      pitfalls: ['اشتباه نکن! در آخر یادت باشد تقسیم بر ۲ کنی.']
+    },
+    {
+      id: 'composite', title: 'شکل‌های ترکیبی', emoji: '🏠',
+      formula: 'مساحت کل = جمع مساحت‌ها',
+      paragraphs: [
+        'گاهی اوقات یک شکل از چند شکل ساده‌تر ساخته می‌شود. مثلاً یک خانه از یک مستطیل (اتاق) و یک مثلث (سقف) ساخته می‌شود.',
+        'برای پیدا کردن مساحت این‌جور شکل‌ها، آن‌ها را به شکل‌های ساده‌تر تقسیم می‌کنیم، مساحت هر کدام را جدا حساب می‌کنیم، بعد جواب‌ها را با هم جمع می‌کنیم.'
       ],
-      pitfalls: [
-        'اشتباه رایج: فراموش کردن تقسیم بر ۲ در انتها.'
-      ]
+      examples: [
+        {
+          text: 'یک خانه به شکل زیر: مستطیل با طول ۴ و ارتفاع ۳، و یک سقف مثلثی با همان طول ۴ و ارتفاع ۲. مساحت کل چقدر است؟',
+          shape: Shapes.house(4, 3, 2),
+          steps: [
+            'مساحت مستطیل (اتاق) = ۴ × ۳ = ۱۲',
+            'مساحت مثلث (سقف) = (۴ × ۲) ÷ ۲ = ۸ ÷ ۲ = ۴',
+            'مساحت کل = ۱۲ + ۴ = ۱۶'
+          ],
+          answer: 'مساحت کل = ۱۶ متر مربع'
+        },
+        {
+          text: 'یک شکل L شکل داریم که از دو مستطیل ساخته شده. مساحتش چقدر است؟',
+          shape: Shapes.lshape(5, 3, 2, 4),
+          steps: [
+            'مستطیل بالا: ۵ × ۳ = ۱۵',
+            'مستطیل پایین: ۲ × ۴ = ۸',
+            'جمع: ۱۵ + ۸ = ۲۳'
+          ],
+          answer: 'مساحت کل = ۲۳ سانتی‌متر مربع'
+        }
+      ],
+      tips: ['اول شکل را به شکل‌های ساده‌تر تقسیم کن. بعد مساحت هر کدام را جدا حساب کن.'],
+      pitfalls: ['اشتباه نکن! مساحت‌ها را با هم جمع کن، نه اینکه ابعاد را با هم جمع کنی.']
+    }
+  ],
+  volume: [
+    {
+      id: 'cube', title: 'مکعب', emoji: '🧊',
+      formula: 'حجم = ضلع × ضلع × ضلع',
+      paragraphs: [
+        'حجم یعنی چقدر «فضا» داخل یک شکل سه‌بعدی جا می‌شود. مثلاً یک جعبه چقدر می‌تواند وسایل در خودش جا بدهد.',
+        'مکعب شکلی است که همه‌ی ضلع‌هایش مساوی‌اند و همه‌ی زوایایش قائمه. مثل تاسِ بازی!',
+        'برای حجم مکعب، ضلع را سه بار در خودش ضرب می‌کنیم: ضلع × ضلع × ضلع.'
+      ],
+      examples: [
+        {
+          text: 'یک مکعب داریم که هر ضلعش ۲ سانتی‌متر است. حجمش چقدر است؟',
+          shape: Shapes.cube(2),
+          steps: ['ضلع = ۲', 'حجم = ۲ × ۲ × ۲', '۲ × ۲ = ۴ و ۴ × ۲ = ۸'],
+          answer: 'حجم = ۸ سانتی‌متر مکعب'
+        },
+        {
+          text: 'تاس بازی ما مکعبی است و هر ضلعش ۳ سانتی‌متر. حجمش چقدر است؟',
+          shape: Shapes.cube(3),
+          steps: ['حجم = ۳ × ۳ × ۳', '۳ × ۳ = ۹ و ۹ × ۳ = ۲۷'],
+          answer: 'حجم = ۲۷ سانتی‌متر مکعب'
+        },
+        {
+          text: 'یک جعبه‌ی مکعبی داریم که هر ضلعش ۴ سانتی‌متر. حجمش چقدر است؟',
+          shape: Shapes.cube(4),
+          steps: ['حجم = ۴ × ۴ × ۴', '۴ × ۴ = ۱۶ و ۱۶ × ۴ = ۶۴'],
+          answer: 'حجم = ۶۴ سانتی‌متر مکعب'
+        }
+      ],
+      tips: ['واحد حجم همیشه «مکعب» دارد: سانتی‌متر مکعب، متر مکعب.'],
+      pitfalls: ['اشتباه نکن! مساحت مربع = ضلع × ضلع، ولی حجم مکعب = ضلع × ضلع × ضلع.']
+    },
+    {
+      id: 'box', title: 'مکعب مستطیل', emoji: '📦',
+      formula: 'حجم = طول × عرض × ارتفاع',
+      paragraphs: [
+        'مکعب مستطیل شبیه یک جعبه کفش یا یخچال است. سه اندازه دارد: طول، عرض و ارتفاع.',
+        'برای حجم مکعب مستطیل، هر سه اندازه را در هم ضرب می‌کنیم: طول × عرض × ارتفاع.'
+      ],
+      examples: [
+        {
+          text: 'یک جعبه داریم به طول ۳، عرض ۲ و ارتفاع ۲ سانتی‌متر. حجمش چقدر است؟',
+          shape: Shapes.box(3, 2, 2),
+          steps: ['اول دو عدد اول: ۳ × ۲ = ۶', 'بعد در سومی ضرب: ۶ × ۲ = ۱۲'],
+          answer: 'حجم = ۱۲ سانتی‌متر مکعب'
+        },
+        {
+          text: 'یک یخچال داریم به طول ۴، عرض ۳ و ارتفاع ۵ سانتی‌متر. حجم داخلی‌اش چقدر است؟',
+          shape: Shapes.box(4, 3, 5),
+          steps: ['۴ × ۳ = ۱۲', '۱۲ × ۵ = ۶۰'],
+          answer: 'حجم = ۶۰ سانتی‌متر مکعب'
+        }
+      ],
+      tips: ['ترتیب ضرب اهمیتی ندارد.'],
+      pitfalls: ['اشتباه نکن! مساحت مستطیل دو عددی است، ولی حجم مکعب مستطیل سه عددی است.']
     }
   ],
   fractions: [
     {
       id: 'concept', title: 'مفهوم کسر', emoji: '🍕',
-      formula: 'صورت / مخرج',
+      formula: 'صورت بالا، مخرج پایین',
       paragraphs: [
-        'کسر یعنی «چند قسمت از یک کل». مثلاً اگر یک پیتزا را به ۴ قسمت مساوی تقسیم کنیم و ۳ قسمت آن را بخوریم، می‌گوییم ۳/۴ پیتزا خورده‌ایم.',
-        'عدد بالایی را «صورت» و عدد پایینی را «مخرج» می‌نامیم. مخرج نشان می‌دهد کل به چند قسمت تقسیم شده، و صورت نشان می‌دهد چند قسمت برداشته‌ایم.'
+        'تصور کن یک پیتزا داری و آن را به ۴ قسمت مساوی تقسیم کرده‌ای. اگر ۱ قسمت را بخوری، چند قسمت از کل را خورده‌ای؟ ۱ از ۴.',
+        'برای نشان دادن این، از «کسر» استفاده می‌کنیم. کسر یعنی «چند قسمت از یک کل».',
+        'کسر دو عدد دارد: عدد بالا را «صورت» می‌گویند (نشان می‌دهد چند قسمت برداشته‌ایم) و عدد پایین را «مخرج» (نشان می‌دهد کل به چند قسمت تقسیم شده).'
       ],
       examples: [
         {
-          text: 'شکل زیر را نگاه کن. کسر رنگی چقدر است؟',
+          text: 'این دایره را نگاه کن. چند قسمت رنگی شده؟ کسر رنگی چقدر است؟',
           html: Shapes.fracPie(3, 4),
-          steps: ['کل به ۴ قسمت تقسیم شده → مخرج = ۴', '۳ قسمت رنگی است → صورت = ۳'],
-          answer: 'کسر رنگی = ۳/۴'
+          steps: ['دایره به ۴ قسمت مساوی تقسیم شده → مخرج = ۴', '۳ قسمت آن رنگی است → صورت = ۳'],
+          answer: 'کسر رنگی = سه‌چهارم'
         },
         {
-          text: 'کسر ۲/۵ یعنی چه؟',
-          html: `${fracHTML({ n: 2, d: 5 })}`,
+          text: 'کسر «۲ از ۵» یعنی چه؟',
+          html: fracHTML({ n: 2, d: 5 }),
           steps: ['مخرج ۵ → کل به ۵ قسمت تقسیم شده', 'صورت ۲ → ۲ قسمت برداشته شده'],
-          answer: '۲ قسمت از ۵ قسمت مساوی'
+          answer: 'یعنی ۲ قسمت از ۵ قسمت مساوی'
+        },
+        {
+          text: 'اگر یک کیک را به ۸ قسمت مساوی تقسیم کنیم و ۳ قسمت را بخوریم، چند قسمت از کیک را خورده‌ایم؟',
+          html: fracHTML({ n: 3, d: 8 }),
+          steps: ['کل کیک = ۸ قسمت', 'خورده‌ایم = ۳ قسمت'],
+          answer: 'سه‌هشتم کیک را خورده‌ایم'
         }
       ],
       tips: [
-        'مخرج هرگز نمی‌تواند صفر باشد.',
+        'مخرج هرگز نمی‌تواند صفر باشد، چون تقسیم بر صفر معنی ندارد.',
         'همه‌ی قسمت‌ها باید مساوی باشند.'
       ],
-      pitfalls: [
-        'اشتباه رایج: قاطی کردن جای صورت و مخرج.'
-      ]
+      pitfalls: ['اشتباه نکن! جای صورت و مخرج را با هم عوض نکن.']
     },
     {
       id: 'equiv', title: 'کسر معادل', emoji: '🟰',
-      formula: 'a/b = (a×k)/(b×k)',
+      formula: 'ضرب صورت و مخرج در یک عدد',
       paragraphs: [
-        'دو کسر وقتی معادل هستند که مقدارشان یکی باشد، حتی اگر صورت و مخرجشان متفاوت باشد. مثلاً ۱/۲ و ۲/۴ و ۳/۶ همه یک مقدار دارند (نصف).',
-        'برای ساختن کسر معادل، صورت و مخرج را در یک عدد ضرب، یا هر دو را بر یک عدد تقسیم می‌کنیم.'
+        'گاهی دو کسر با اینکه عددهایشان فرق دارد، اما مقدارشان یکی است. مثلاً نصفِ یک پیتزا با دوچهارمِ یک پیتزا برابر است! (چون ۲ تا یک‌چهارم با هم یک نصف می‌شوند.)',
+        'به این کسرها می‌گوییم «کسر معادل». برای ساختن کسر معادل، هم صورت و هم مخرج را در یک عدد ضرب می‌کنیم.'
       ],
       examples: [
         {
-          text: 'آیا ۱/۲ و ۳/۶ معادل‌اند؟',
-          html: `${fracHTML({ n: 1, d: 2 })} ? ${fracHTML({ n: 3, d: 6 })}`,
-          steps: ['صورت و مخرج ۱/۲ را در ۳ ضرب کن', '۱×۳ = ۳ و ۲×۳ = ۶', 'پس ۱/۲ = ۳/۶ ✓'],
-          answer: 'بله، معادل‌اند'
+          text: 'آیا یک‌دوم با سه‌ششم برابر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} ? ${fracHTML({ n: 3, d: 6 })}</span>`,
+          steps: [
+            'صورت و مخرج کسر یک‌دوم را در ۳ ضرب می‌کنیم:',
+            '۱ × ۳ = ۳ و ۲ × ۳ = ۶',
+            'حالا کسر سه‌ششم به دست آمد که همان کسر اول است.'
+          ],
+          answer: 'بله! این دو کسر با هم برابرند.'
         },
         {
-          text: 'برای کسر ۲/۳ یک کسر معادل با مخرج ۹ بساز.',
-          html: `${fracHTML({ n: 2, d: 3 })} = ? / ۹`,
-          steps: ['از ۳ به ۹ یعنی ضرب در ۳', 'پس صورت هم × ۳: ۲ × ۳ = ۶'],
-          answer: '۶/۹'
+          text: 'برای کسر دو‌سوم یک کسر معادل با مخرج ۹ بساز.',
+          html: `<span dir="ltr">${fracHTML({ n: 2, d: 3 })} = ? / ۹</span>`,
+          steps: [
+            'از مخرج ۳ به ۹ یعنی ضرب در ۳',
+            'پس صورت را هم در ۳ ضرب می‌کنیم: ۲ × ۳ = ۶'
+          ],
+          answer: `پس کسر ${fracHTML({ n: 6, d: 9 })} همان دو‌سوم است.`
         }
       ],
-      tips: [
-        'ضرب یا تقسیم صورت و مخرج در یک عدد، مقدار کسر را تغییر نمی‌دهد.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فقط صورت یا فقط مخرج را ضرب کردن.'
-      ]
+      tips: ['ضرب صورت و مخرج در یک عدد، مقدار کسر را تغییر نمی‌دهد.'],
+      pitfalls: ['اشتباه نکن! باید هم صورت و هم مخرج را در یک عدد ضرب کنی.']
     },
     {
       id: 'simplify', title: 'ساده کردن کسر', emoji: '✂️',
-      formula: 'تقسیم بر ب.م.م',
+      formula: 'تقسیم صورت و مخرج بر ب.م.م',
       paragraphs: [
-        'ساده کردن یعنی نوشتن کسری به ساده‌ترین شکل ممکن. برای این کار، صورت و مخرج را بر بزرگ‌ترین مقسوم‌علیه مشترکشان (ب.م.م) تقسیم می‌کنیم.',
-        'کسر ساده‌شده با کسر اولیه برابر است، فقط ظاهرش ساده‌تر می‌شود.'
+        'گاهی کسرها عددهای بزرگی دارند که می‌شود کوچک‌ترشان کرد بدون اینکه مقدارشان عوض شود. به این کار می‌گویند «ساده کردن کسر».',
+        'برای ساده کردن، باید بفهمیم بزرگ‌ترین عددی که هم صورت و هم مخرج بر آن بخش‌پذیرند چیست. به این عدد می‌گویند «بزرگ‌ترین مقسوم‌علیه مشترک» یا به‌اختصار «ب.م.م».',
+        'بعد هم صورت و هم مخرج را بر آن ب.م.م تقسیم می‌کنیم. مثلاً کسر چهار‌هشتم را می‌شود به یک‌دوم ساده کرد، چون هم ۴ و هم ۸ بر ۴ بخش‌پذیرند.',
+        'یادت باشد: کسر ساده‌شده با کسر اولیه برابر است، فقط ظاهرش ساده‌تر می‌شود.'
       ],
       examples: [
         {
-          text: 'کسر ۶/۸ را ساده کن.',
-          html: fracHTML({ n: 6, d: 8 }),
-          steps: ['ب.م.م ۶ و ۸ = ۲', '۶÷۲ = ۳ و ۸÷۲ = ۴ → ۳/۴'],
-          answer: '۳/۴'
+          text: 'کسر دو‌چهارم را ساده کن.',
+          html: fracHTML({ n: 2, d: 4 }),
+          steps: [
+            'بزرگ‌ترین عددی که هم ۲ و هم ۴ بر آن بخش‌پذیرند: ۲',
+            'صورت را بر ۲ تقسیم می‌کنیم: ۲ ÷ ۲ = ۱',
+            'مخرج را بر ۲ تقسیم می‌کنیم: ۴ ÷ ۲ = ۲',
+            'نتیجه: یک‌دوم'
+          ],
+          answer: `پس ${fracHTML({ n: 2, d: 4 })} = ${fracHTML({ n: 1, d: 2 })}`
         },
         {
-          text: 'کسر ۱۵/۲۵ را ساده کن.',
-          html: fracHTML({ n: 15, d: 25 }),
-          steps: ['ب.م.م ۱۵ و ۲۵ = ۵', '۱۵÷۵ = ۳ و ۲۵÷۵ = ۵ → ۳/۵'],
-          answer: '۳/۵'
+          text: 'کسر شش‌نهم را ساده کن.',
+          html: fracHTML({ n: 6, d: 9 }),
+          steps: [
+            'بزرگ‌ترین مقسوم‌علیه مشترک ۶ و ۹: عدد ۳ است.',
+            'صورت: ۶ ÷ ۳ = ۲',
+            'مخرج: ۹ ÷ ۳ = ۳',
+            'نتیجه: دو‌سوم'
+          ],
+          answer: `پس ${fracHTML({ n: 6, d: 9 })} = ${fracHTML({ n: 2, d: 3 })}`
+        },
+        {
+          text: 'کسر هشت‌دوازدهم را ساده کن.',
+          html: fracHTML({ n: 8, d: 12 }),
+          steps: [
+            'مقسوم‌علیه‌های ۸: ۱، ۲، ۴، ۸',
+            'مقسوم‌علیه‌های ۱۲: ۱، ۲، ۳، ۴، ۶، ۱۲',
+            'بزرگ‌ترین مشترک: ۴',
+            'صورت: ۸ ÷ ۴ = ۲',
+            'مخرج: ۱۲ ÷ ۴ = ۳',
+            'نتیجه: دو‌سوم'
+          ],
+          answer: `پس ${fracHTML({ n: 8, d: 12 })} = ${fracHTML({ n: 2, d: 3 })}`
+        },
+        {
+          text: 'کسر ده‌پانزدهم را ساده کن.',
+          html: fracHTML({ n: 10, d: 15 }),
+          steps: [
+            'مقسوم‌علیه مشترک ۱۰ و ۱۵: عدد ۵',
+            '۱۰ ÷ ۵ = ۲ و ۱۵ ÷ ۵ = ۳',
+            'نتیجه: دو‌سوم'
+          ],
+          answer: `پس ${fracHTML({ n: 10, d: 15 })} = ${fracHTML({ n: 2, d: 3 })}`
         }
       ],
       tips: [
-        'اگر ب.م.م را بلد نیستی، با اعداد کوچک شروع کن و کم‌کم ساده کن.'
+        'اگر عدد بزرگ را بلد نبودی، با عددهای کوچک شروع کن و مرحله‌به‌مرحله ساده کن.',
+        'همیشه نتیجه را با کوچک‌ترین عدد ممکن بنویس.',
+        'اگر صورت و مخرج ب.م.م نداشتند (به‌جز ۱)، یعنی کسر از قبل ساده بوده.'
       ],
       pitfalls: [
-        'اشتباه رایج: تقسیم فقط یکی از صورت یا مخرج.'
+        'اشتباه نکن! فقط صورت یا فقط مخرج را تقسیم نکن. باید هر دو را تقسیم کنی.',
+        'یادت باشد جواب آخر باید هم ساده‌تر و هم با کسر اولیه برابر باشد.'
       ]
     },
     {
       id: 'compare', title: 'مقایسه کسرها', emoji: '⚖️',
-      formula: 'مخرج مشترک',
+      formula: 'مخرج مشترک بگیر',
       paragraphs: [
-        'برای مقایسه‌ی دو کسر با مخرج‌های مختلف، باید مخرج‌ها را مشترک کنیم و بعد صورت‌ها را مقایسه کنیم.',
-        'وقتی مخرج‌ها یکی شدند، کسری که صورت بزرگ‌تری دارد، بزرگ‌تر است.'
+        'برای اینکه بفهمیم کدام کسر بزرگ‌تر است، باید مخرج‌ها را با هم مساوی کنیم. یعنی کاری کنیم که هر دو کسر مخرج یکسان داشته باشند.',
+        'بعد از اینکه مخرج‌ها یکی شد، کسری که صورت بزرگ‌تری دارد، بزرگ‌تر است.'
       ],
       examples: [
         {
-          text: 'کدام بزرگ‌تر است: ۲/۳ یا ۱/۲؟',
-          html: `${fracHTML({ n: 2, d: 3 })} ? ${fracHTML({ n: 1, d: 2 })}`,
-          steps: ['مخرج مشترک: ۶', '۲/۳ = ۴/۶', '۱/۲ = ۳/۶', '۴ > ۳ پس ۲/۳ > ۱/۲'],
-          answer: '۲/۳ بزرگ‌تر است'
+          text: 'کدام بزرگ‌تر است: یک‌دوم یا یک‌سوم؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} ? ${fracHTML({ n: 1, d: 3 })}</span>`,
+          steps: [
+            'مخرج مشترک: ۶',
+            'یک‌دوم = سه‌ششم',
+            'یک‌سوم = دو‌ششم',
+            'مقایسه صورت‌ها: ۳ > ۲'
+          ],
+          answer: 'پس یک‌دوم بزرگ‌تر است.'
         },
         {
-          text: 'کدام بزرگ‌تر است: ۳/۵ یا ۵/۸؟',
-          html: `${fracHTML({ n: 3, d: 5 })} ? ${fracHTML({ n: 5, d: 8 })}`,
-          steps: ['مخرج مشترک: ۴۰', '۳/۵ = ۲۴/۴۰', '۵/۸ = ۲۵/۴۰', '۲۴ < ۲۵ پس ۳/۵ < ۵/۸'],
-          answer: '۵/۸ بزرگ‌تر است'
+          text: 'کدام بزرگ‌تر است: دو‌سوم یا سه‌چهارم؟',
+          html: `<span dir="ltr">${fracHTML({ n: 2, d: 3 })} ? ${fracHTML({ n: 3, d: 4 })}</span>`,
+          steps: [
+            'مخرج مشترک: ۱۲',
+            'دو‌سوم = هشت‌دوازدهم',
+            'سه‌چهارم = نه‌دوازدهم',
+            '۸ < ۹ پس سه‌چهارم بزرگ‌تر است.'
+          ],
+          answer: 'پس سه‌چهارم بزرگ‌تر است.'
         }
       ],
-      tips: [
-        'وقتی مخرج‌ها مساوی‌اند، فقط صورت را مقایسه کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فکر کردن اینکه کسر با مخرج بزرگ‌تر حتماً بزرگ‌تر است. نه! مثلاً ۱/۲ > ۱/۵.'
-      ]
+      tips: ['اگر مخرج‌ها مساوی بودند، فقط صورت را نگاه کن.'],
+      pitfalls: ['اشتباه نکن! کسری که مخرج بزرگ‌تری دارد، همیشه بزرگ‌تر نیست. مثلاً یک‌دوم بزرگ‌تر از یک‌پنجم است.']
     },
     {
       id: 'add', title: 'جمع کسرها', emoji: '➕',
-      formula: 'مخرج مشترک → جمع صورت‌ها',
+      formula: 'مخرج مشترک بگیر، بعد جمع کن',
       paragraphs: [
-        'برای جمع دو کسر، اول باید مخرج‌ها را مشترک کنیم. چون فقط چیزهایی با واحد یکسان را می‌توان جمع کرد.',
-        'بعد از مشترک کردن مخرج‌ها، صورت‌ها را جمع می‌کنیم و نتیجه را ساده می‌کنیم.'
+        'برای جمع دو کسر، اول باید مخرج‌هایشان را با هم مساوی کنیم. چرا؟ چون نمی‌شود چیزهای با واحد مختلف را با هم جمع کرد.',
+        'بعد از مشترک کردن مخرج‌ها، صورت‌ها را با هم جمع می‌کنیم و مخرج را همان می‌نویسیم.'
       ],
       examples: [
         {
-          text: 'حاصل جمع ۱/۳ + ۱/۴ = ?',
-          html: `${fracHTML({ n: 1, d: 3 })} + ${fracHTML({ n: 1, d: 4 })}`,
-          steps: ['مخرج مشترک ۳ و ۴ = ۱۲', '۱/۳ = ۴/۱۲', '۱/۴ = ۳/۱۲', '۴ + ۳ = ۷ → نتیجه ۷/۱۲'],
-          answer: '۷/۱۲'
+          text: 'حاصل جمع یک‌پنجم و دو‌پنجم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 5 })} + ${fracHTML({ n: 2, d: 5 })}</span>`,
+          steps: [
+            'مخرج‌ها هر دو ۵ هستند (مساوی).',
+            'فقط صورت‌ها را جمع می‌کنیم: ۱ + ۲ = ۳',
+            'نتیجه: سه‌پنجم'
+          ],
+          answer: `= ${fracHTML({ n: 3, d: 5 })}`
         },
         {
-          text: 'حاصل ۲/۵ + ۱/۵ = ?',
-          html: `${fracHTML({ n: 2, d: 5 })} + ${fracHTML({ n: 1, d: 5 })}`,
-          steps: ['مخرج‌ها مساوی‌اند → فقط صورت‌ها را جمع کن', '۲ + ۱ = ۳'],
-          answer: '۳/۵'
+          text: 'حاصل جمع یک‌دوم و یک‌سوم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} + ${fracHTML({ n: 1, d: 3 })}</span>`,
+          steps: [
+            'مخرج‌ها فرق دارند: ۲ و ۳',
+            'مخرج مشترک می‌شود ۶',
+            'یک‌دوم = سه‌ششم (چون صورت و مخرج را در ۳ ضرب کردیم)',
+            'یک‌سوم = دو‌ششم (چون در ۲ ضرب کردیم)',
+            'حالا مخرج‌ها یکی است: ۳ + ۲ = ۵',
+            'نتیجه: پنج‌ششم'
+          ],
+          answer: `= ${fracHTML({ n: 5, d: 6 })}`
         }
       ],
-      tips: [
-        'اگر مخرج‌ها مساوی‌اند، سریع فقط صورت‌ها را جمع کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: جمع کردن صورت‌ها و مخرج‌ها با هم! مثلاً ۱/۲ + ۱/۲ ≠ ۲/۴. جواب درست ۲/۲ = ۱ است.'
-      ]
+      tips: ['اگر مخرج‌ها مساوی بودند، فقط صورت‌ها را جمع کن.'],
+      pitfalls: ['اشتباه نکن! مخرج‌ها را با هم جمع نکن! فقط صورت‌ها را جمع می‌کنیم.']
     },
     {
       id: 'sub', title: 'تفریق کسرها', emoji: '➖',
-      formula: 'مخرج مشترک → تفریق صورت‌ها',
+      formula: 'مخرج مشترک بگیر، بعد کم کن',
       paragraphs: [
-        'تفریق کسرها هم مثل جمع است: اول مخرج‌ها را مشترک می‌کنیم، سپس صورت‌ها را از هم کم می‌کنیم.',
-        'نتیجه را در انتها ساده کن.'
+        'تفریق کسرها هم دقیقاً مثل جمع است. اول مخرج‌ها را مشترک می‌کنیم، بعد صورت‌ها را کم می‌کنیم.'
       ],
       examples: [
         {
-          text: 'حاصل ۳/۴ − ۱/۴ = ?',
-          html: `${fracHTML({ n: 3, d: 4 })} − ${fracHTML({ n: 1, d: 4 })}`,
-          steps: ['مخرج مساوی → فقط صورت‌ها را کم کن', '۳ − ۱ = ۲', '۲/۴ ساده می‌شود به ۱/۲'],
-          answer: '۱/۲'
+          text: 'حاصل تفریق سه‌پنجم منهای یک‌پنجم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 3, d: 5 })} − ${fracHTML({ n: 1, d: 5 })}</span>`,
+          steps: [
+            'مخرج‌ها مساوی (۵).',
+            'صورت‌ها را کم می‌کنیم: ۳ − ۱ = ۲',
+            'نتیجه: دو‌پنجم'
+          ],
+          answer: `= ${fracHTML({ n: 2, d: 5 })}`
         },
         {
-          text: 'حاصل ۵/۶ − ۱/۳ = ?',
-          html: `${fracHTML({ n: 5, d: 6 })} − ${fracHTML({ n: 1, d: 3 })}`,
-          steps: ['مخرج مشترک ۶', '۱/۳ = ۲/۶', '۵/۶ − ۲/۶ = ۳/۶ = ۱/۲'],
-          answer: '۱/۲'
+          text: 'حاصل تفریق سه‌چهارم منهای یک‌دوم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 3, d: 4 })} − ${fracHTML({ n: 1, d: 2 })}</span>`,
+          steps: [
+            'مخرج‌ها فرق دارند: ۴ و ۲',
+            'مخرج مشترک: ۴',
+            'یک‌دوم = دو‌چهارم',
+            'سه‌چهارم − دو‌چهارم = یک‌چهارم'
+          ],
+          answer: `= ${fracHTML({ n: 1, d: 4 })}`
         }
       ],
-      tips: [
-        'همیشه نتیجه را ساده کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: کم کردن مخرج‌ها از هم.'
-      ]
+      tips: ['در پایان اگر ممکن بود، کسر را ساده کن.'],
+      pitfalls: ['اشتباه نکن! مخرج را تغییر نده، فقط صورت‌ها را کم کن.']
     },
     {
       id: 'mul', title: 'ضرب کسرها', emoji: '✖️',
-      formula: '(صورت×صورت) / (مخرج×مخرج)',
+      formula: 'صورت × صورت ، مخرج × مخرج',
       paragraphs: [
-        'ضرب کسرها ساده‌ترین عملیات است! فقط صورت‌ها را در هم و مخرج‌ها را در هم ضرب می‌کنیم. نیازی به مخرج مشترک نیست.',
-        'اگر بتوانی قبل از ضرب، صورت و مخرج‌ها را ساده کنی، محاسبه آسان‌تر می‌شود.'
+        'ضرب کسرها از همه راحت‌تر است! نیازی به مخرج مشترک نیست.',
+        'فقط صورت‌ها را در هم ضرب می‌کنیم و مخرج‌ها را در هم.'
       ],
       examples: [
         {
-          text: 'حاصل ۲/۳ × ۳/۵ = ?',
-          html: `${fracHTML({ n: 2, d: 3 })} × ${fracHTML({ n: 3, d: 5 })}`,
-          steps: ['صورت‌ها: ۲ × ۳ = ۶', 'مخرج‌ها: ۳ × ۵ = ۱۵', '۶/۱۵ ساده = ۲/۵'],
-          answer: '۲/۵'
-        },
-        {
-          text: 'حاصل ۱/۲ × ۲/۵ = ?',
-          html: `${fracHTML({ n: 1, d: 2 })} × ${fracHTML({ n: 2, d: 5 })}`,
-          steps: ['صورت‌ها: ۱ × ۲ = ۲', 'مخرج‌ها: ۲ × ۵ = ۱۰', '۲/۱۰ = ۱/۵'],
-          answer: '۱/۵'
+          text: 'حاصل ضرب یک‌دوم و دو‌سوم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} × ${fracHTML({ n: 2, d: 3 })}</span>`,
+          steps: [
+            'صورت‌ها: ۱ × ۲ = ۲',
+            'مخرج‌ها: ۲ × ۳ = ۶',
+            'نتیجه: دو‌ششم که ساده می‌شود به یک‌سوم'
+          ],
+          answer: `= ${fracHTML({ n: 1, d: 3 })}`
         }
       ],
-      tips: [
-        'می‌توانی صورت با مخرج را قبل از ضرب ساده کنی.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: گرفتن مخرج مشترک برای ضرب. لازم نیست!'
-      ]
+      tips: ['در انتها نتیجه را ساده کن.'],
+      pitfalls: ['اشتباه نکن! برای ضرب نیازی به مخرج مشترک نیست.']
     },
     {
       id: 'div', title: 'تقسیم کسرها', emoji: '➗',
-      formula: 'کسر دوم را معکوس کن و ضرب کن',
+      formula: 'کسر دوم را برعکس کن، بعد ضرب کن',
       paragraphs: [
-        'برای تقسیم دو کسر، کسر دوم را معکوس می‌کنیم (صورت و مخرج را جابجا) و بعد ضرب می‌کنیم.',
-        'معکوس ۲/۳ می‌شود ۳/۲.'
+        'برای تقسیم دو کسر، اول کسر دوم را برعکس می‌کنیم (صورت و مخرج جابجا). به این کار «معکوس کردن» می‌گویند.',
+        'بعد ضرب می‌کنیم. مثلاً معکوس دو‌سوم می‌شود سه‌دوم.'
       ],
       examples: [
         {
-          text: 'حاصل ۱/۲ ÷ ۱/۴ = ?',
-          html: `${fracHTML({ n: 1, d: 2 })} ÷ ${fracHTML({ n: 1, d: 4 })}`,
-          steps: ['معکوس ۱/۴ می‌شود ۴/۱', '۱/۲ × ۴/۱ = ۴/۲', '= ۲'],
-          answer: '۲'
-        },
-        {
-          text: 'حاصل ۳/۴ ÷ ۲/۳ = ?',
-          html: `${fracHTML({ n: 3, d: 4 })} ÷ ${fracHTML({ n: 2, d: 3 })}`,
-          steps: ['معکوس ۲/۳ می‌شود ۳/۲', '۳/۴ × ۳/۲ = ۹/۸'],
-          answer: '۹/۸'
+          text: 'حاصل تقسیم یک‌دوم بر یک‌سوم چقدر است؟',
+          html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} ÷ ${fracHTML({ n: 1, d: 3 })}</span>`,
+          steps: [
+            'معکوس یک‌سوم می‌شود سه‌یکم',
+            'حالا ضرب: یک‌دوم × سه‌یکم',
+            'صورت: ۱ × ۳ = ۳',
+            'مخرج: ۲ × ۱ = ۲',
+            'نتیجه: سه‌دوم'
+          ],
+          answer: `= ${fracHTML({ n: 3, d: 2 })}`
         }
       ],
-      tips: [
-        'یادت باشد: «تقسیم بر یک کسر = ضرب در معکوس آن».'
-      ],
-      pitfalls: [
-        'اشتباه رایج: معکوس کردن کسر اول به‌جای کسر دوم.'
-      ]
+      tips: ['یادت باشد: «تقسیم = ضرب در معکوس»'],
+      pitfalls: ['اشتباه نکن! کسر دوم را معکوس کن، نه کسر اول را.']
     },
     {
       id: 'mixed', title: 'عدد مخلوط', emoji: '🔢',
       formula: 'عدد صحیح + کسر',
       paragraphs: [
-        'عدد مخلوط ترکیبی از یک عدد صحیح و یک کسر است، مثلاً ۲ و ۱/۳ که یعنی ۲ + ۱/۳.',
-        'برای تبدیل عدد مخلوط به کسر: صورت = (عدد صحیح × مخرج) + صورت. مخرج ثابت می‌ماند.'
+        'گاهی یک عدد صحیح و یک کسر با هم ترکیب می‌شوند. مثلاً «دو و یک‌سوم» یعنی ۲ کامل به‌اضافه‌ی یک‌سوم.',
+        'برای تبدیل به کسر ساده، عدد صحیح را در مخرج ضرب می‌کنیم، بعد صورت را اضافه می‌کنیم.'
       ],
       examples: [
         {
-          text: 'عدد مخلوط ۲ و ۱/۳ را به کسر تبدیل کن.',
-          html: `۲${fracHTML({ n: 1, d: 3 })}`,
-          steps: ['صورت = (۲ × ۳) + ۱ = ۶ + ۱ = ۷', 'مخرج = ۳'],
-          answer: '۷/۳'
-        },
-        {
-          text: 'عدد مخلوط ۳ و ۲/۵ را به کسر تبدیل کن.',
-          html: `۳${fracHTML({ n: 2, d: 5 })}`,
-          steps: ['صورت = (۳ × ۵) + ۲ = ۱۵ + ۲ = ۱۷', 'مخرج = ۵'],
-          answer: '۱۷/۵'
+          text: 'عدد مخلوط دو و یک‌سوم را به کسر تبدیل کن.',
+          html: mixedHTML({ n: 7, d: 3 }),
+          steps: [
+            'عدد صحیح = ۲، مخرج = ۳، صورت = ۱',
+            'صورت جدید = (۲ × ۳) + ۱ = ۶ + ۱ = ۷',
+            'مخرج همان ۳ می‌ماند'
+          ],
+          answer: `= ${fracHTML({ n: 7, d: 3 })}`
         }
       ],
-      tips: [
-        'برای برعکس (کسر به مخلوط): صورت را بر مخرج تقسیم کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: ضرب نکردن عدد صحیح در مخرج.'
-      ]
+      tips: ['برای برعکس (از کسر به مخلوط): صورت را بر مخرج تقسیم کن.'],
+      pitfalls: ['اشتباه نکن! عدد صحیح را در مخرج ضرب کن، بعد با صورت جمع کن.']
     }
   ],
   decimals: [
@@ -2222,262 +2551,136 @@ const LESSONS = {
       id: 'concept', title: 'مفهوم اعشار', emoji: '🔟',
       formula: 'یک‌دهم، صدم، هزارم',
       paragraphs: [
-        'اعداد اعشاری برای نمایش قسمت‌های کمتر از یک استفاده می‌شوند. مثلاً نصف یک سیب = ۰٫۵.',
-        'بعد از ممیز، اولین رقم نشان‌دهنده‌ی دهم، دومی صدم، و سومی هزارم است.'
+        'اعداد اعشاری برای نشان دادن قسمت‌های کوچک‌تر از یک استفاده می‌شوند. مثلاً نصف یک سیب را می‌شود ۰٫۵ نوشت.',
+        'بعد از ممیز، اولین رقم نشان می‌دهد چند دهم است، دومی چند صدم، سومی چند هزارم.'
       ],
       examples: [
         {
           text: '۰٫۵ یعنی چه؟',
           html: eq('۰٫۵'),
-          steps: ['۵ در جای دهم', '۵/۱۰ = ۱/۲'],
+          steps: ['۵ بعد از ممیز، یعنی ۵ دهم', '۵ دهم = نصف'],
           answer: '۰٫۵ = نصف'
         },
         {
-          text: '۰٫۲۵ به کسر معادلش تبدیل کن.',
+          text: '۰٫۲۵ چطور؟',
           html: eq('۰٫۲۵'),
-          steps: ['۲۵ در جای صدم', '۲۵/۱۰۰', 'ساده می‌شود به ۱/۴'],
-          answer: '۰٫۲۵ = ۱/۴'
+          steps: ['۲۵ بعد از ممیز یعنی ۲۵ صدم', '۲۵ صدم = یک‌چهارم'],
+          answer: '۰٫۲۵ = یک‌چهارم'
         }
       ],
-      tips: [
-        'هر رقم بعد از ممیز، یک جایگاه دارد: دهم، صدم، هزارم.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فراموش کردن صفر قبل از ممیز.'
-      ]
-    },
-    {
-      id: 'place', title: 'ارزش مکانی', emoji: '📍',
-      formula: 'یکان، دهم، صدم',
-      paragraphs: [
-        'هر رقم در یک عدد اعشاری، یک ارزش دارد که به موقعیتش بستگی دارد.',
-        'در عدد ۳٫۴۵: رقم ۳ در جای یکان، ۴ در جای دهم و ۵ در جای صدم است.'
-      ],
-      examples: [
-        {
-          text: 'در عدد ۷٫۸۹، رقم ۸ چه ارزشی دارد؟',
-          html: eq('۷٫۸۹'),
-          steps: ['۷: یکان', '۸: دهم', '۹: صدم'],
-          answer: '۸ در جای دهم است → ۰٫۸'
-        },
-        {
-          text: 'ارزش رقم ۵ در ۱۲٫۰۵ چقدر است؟',
-          html: eq('۱۲٫۰۵'),
-          steps: ['۵ در جای صدم است'],
-          answer: '۵ صدم = ۰٫۰۵'
-        }
-      ],
-      tips: [
-        'از چپ به راست بعد از ممیز: دهم، صدم، هزارم.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فکر کردن که همه‌ی ارقام بعد از ممیز یک ارزش دارند.'
-      ]
+      tips: ['هر رقم بعد از ممیز یک جایگاه دارد: دهم، صدم، هزارم.'],
+      pitfalls: ['اشتباه نکن! فراموش نکن قبل از ممیز صفر بگذاری.']
     },
     {
       id: 'compare', title: 'مقایسه اعشار', emoji: '⚖️',
-      formula: 'مقایسه رقم به رقم',
+      formula: 'رقم به رقم مقایسه کن',
       paragraphs: [
-        'برای مقایسه‌ی دو عدد اعشاری، ابتدا قسمت صحیح را مقایسه می‌کنیم. اگر مساوی بود، ارقام بعد از ممیز را از چپ به راست مقایسه می‌کنیم.',
-        'مثلاً ۰٫۷ > ۰٫۵ چون ۷ > ۵.'
+        'برای مقایسه‌ی دو عدد اعشاری، اول قسمت صحیح (قبل از ممیز) را مقایسه می‌کنیم. اگر مساوی بود، ارقام بعد از ممیز را از چپ به راست.'
       ],
       examples: [
         {
           text: 'کدام بزرگ‌تر است: ۰٫۷ یا ۰٫۵؟',
           html: eq('۰٫۷ ? ۰٫۵'),
-          steps: ['قسمت صحیح هر دو = ۰', 'دهم: ۷ > ۵'],
-          answer: '۰٫۷ > ۰٫۵'
+          steps: ['قسمت صحیح هر دو = ۰', 'رقم دهم: ۷ > ۵'],
+          answer: '۰٫۷ بزرگ‌تر است'
         },
         {
-          text: 'کدام بزرگ‌تر است: ۳٫۲۵ یا ۳٫۵؟',
-          html: eq('۳٫۲۵ ? ۳٫۵'),
-          steps: ['قسمت صحیح: ۳ = ۳', 'دهم: ۲ < ۵', 'پس ۳٫۲۵ < ۳٫۵'],
-          answer: '۳٫۵ بزرگ‌تر است'
+          text: 'کدام بزرگ‌تر است: ۲٫۳ یا ۲٫۵؟',
+          html: eq('۲٫۳ ? ۲٫۵'),
+          steps: ['قسمت صحیح: هر دو ۲', 'دهم: ۳ < ۵'],
+          answer: '۲٫۵ بزرگ‌تر است'
         }
       ],
-      tips: [
-        'اگر یکی از اعداد ارقام کمتری داشت، به‌جای آن صفر بگذار. مثلاً ۳٫۵ = ۳٫۵۰.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: مقایسه بر اساس تعداد ارقام.'
-      ]
+      tips: ['اگر تعداد رقم‌ها فرق داشت، با صفر پر کن. مثلاً ۳٫۵ = ۳٫۵۰.'],
+      pitfalls: ['اشتباه نکن! عددی که ارقام بیشتری دارد همیشه بزرگ‌تر نیست.']
     },
     {
       id: 'add', title: 'جمع اعشار', emoji: '➕',
       formula: 'ممیزها زیر هم',
       paragraphs: [
-        'برای جمع دو عدد اعشاری، آن‌ها را طوری زیر هم می‌نویسیم که ممیزها دقیقاً زیر هم قرار بگیرند.',
-        'بعد مثل اعداد صحیح جمع می‌کنیم و ممیز را در همان ستون قرار می‌دهیم.'
+        'برای جمع اعشاری، اعداد را طوری زیر هم می‌نویسیم که ممیزها روبروی هم باشند. بعد مثل اعداد عادی جمع می‌کنیم.'
       ],
       examples: [
         {
-          text: '۳٫۴ + ۲٫۱ = ?',
+          text: 'حاصل ۳٫۴ + ۲٫۱ چقدر است؟',
           html: eq('۳٫۴ + ۲٫۱'),
-          steps: ['۳٫۴', '۲٫۱ زیرش با ممیز هم‌تراز', '۳٫۴ + ۲٫۱ = ۵٫۵'],
-          answer: '۵٫۵'
-        },
-        {
-          text: '۰٫۲۵ + ۱٫۳ = ?',
-          html: eq('۰٫۲۵ + ۱٫۳'),
-          steps: ['۱٫۳ را بنویس ۱٫۳۰', '۰٫۲۵ + ۱٫۳۰ = ۱٫۵۵'],
-          answer: '۱٫۵۵'
+          steps: ['۳٫۴ را بنویس', '۲٫۱ را زیرش، طوری که ممیزها زیر هم باشند', 'جمع می‌کنیم: ۳٫۴ + ۲٫۱ = ۵٫۵'],
+          answer: '= ۵٫۵'
         }
       ],
-      tips: [
-        'اگر تعداد ارقام اعشار دو عدد فرق داشت، با صفر پر کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: زیر هم نوشتن بدون تراز کردن ممیزها.'
-      ]
+      tips: ['اگر تعداد رقم‌های اعشار فرق داشت، با صفر پر کن.'],
+      pitfalls: ['اشتباه نکن! همیشه ممیزها را زیر هم بنویس.']
     },
     {
       id: 'sub', title: 'تفریق اعشار', emoji: '➖',
       formula: 'ممیزها زیر هم',
       paragraphs: [
-        'تفریق اعشار دقیقاً مثل جمع است: ممیزها را زیر هم می‌گذاریم و مثل اعداد صحیح تفریق می‌کنیم.',
-        'اگر لازم بود، با صفر پر می‌کنیم تا تعداد ارقام اعشار برابر شود.'
+        'تفریق اعشار هم مثل جمع است: ممیزها را زیر هم می‌گذاریم و بعد مثل اعداد عادی تفریق می‌کنیم.'
       ],
       examples: [
         {
-          text: '۵٫۵ − ۲٫۱ = ?',
+          text: 'حاصل ۵٫۵ − ۲٫۱ چقدر است؟',
           html: eq('۵٫۵ − ۲٫۱'),
-          steps: ['۵٫۵', '۲٫۱ زیرش', '۵٫۵ − ۲٫۱ = ۳٫۴'],
-          answer: '۳٫۴'
-        },
-        {
-          text: '۳٫۲ − ۰٫۷۵ = ?',
-          html: eq('۳٫۲ − ۰٫۷۵'),
-          steps: ['۳٫۲ = ۳٫۲۰', '۳٫۲۰ − ۰٫۷۵ = ۲٫۴۵'],
-          answer: '۲٫۴۵'
+          steps: ['۵٫۵', '۲٫۱ زیرش، ممیزها روبرو', '۵٫۵ − ۲٫۱ = ۳٫۴'],
+          answer: '= ۳٫۴'
         }
       ],
-      tips: [
-        'قرض گرفتن از ستون کنار، مثل تفریق اعداد صحیح.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: کم کردن عدد کوچکتر از بزرگتر بدون توجه به ترتیب.'
-      ]
-    },
-    {
-      id: 'mul', title: 'ضرب اعشار', emoji: '✖️',
-      formula: 'ضرب بدون ممیز، سپس ممیز',
-      paragraphs: [
-        'برای ضرب دو عدد اعشاری، ابتدا آن‌ها را بدون ممیز ضرب می‌کنیم. سپس در نتیجه، به تعداد مجموع ارقام اعشار دو عدد، از راست ممیز می‌گذاریم.',
-        'مثلاً ۰٫۵ × ۰٫۲: ۵ × ۲ = ۱۰، مجموع ارقام اعشار = ۲، نتیجه ۰٫۱۰ = ۰٫۱.'
-      ],
-      examples: [
-        {
-          text: '۰٫۵ × ۳ = ?',
-          html: eq('۰٫۵ × ۳'),
-          steps: ['۵ × ۳ = ۱۵', 'ارقام اعشار = ۱', 'ممیز از راست: ۱٫۵'],
-          answer: '۱٫۵'
-        },
-        {
-          text: '۰٫۲ × ۰٫۳ = ?',
-          html: eq('۰٫۲ × ۰٫۳'),
-          steps: ['۲ × ۳ = ۶', 'مجموع ارقام اعشار = ۲', 'ممیز: ۰٫۰۶'],
-          answer: '۰٫۰۶'
-        }
-      ],
-      tips: [
-        'تعداد کل ارقام اعشار را در ضرب، جمع کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: اشتباه شمردن ارقام اعشار در نتیجه.'
-      ]
-    },
-    {
-      id: 'div', title: 'تقسیم اعشار', emoji: '➗',
-      formula: 'حذف ممیز مقسوم‌علیه',
-      paragraphs: [
-        'برای تقسیم اعشاری، اگر مقسوم‌علیه اعشاری بود، ممیز آن را با ضرب کردن در ۱۰، ۱۰۰ و... حذف می‌کنیم. مقسوم را هم به همان اندازه جابجا می‌کنیم.',
-        'بعد مثل تقسیم اعداد صحیح انجام می‌دهیم.'
-      ],
-      examples: [
-        {
-          text: '۱٫۵ ÷ ۳ = ?',
-          html: eq('۱٫۵ ÷ ۳'),
-          steps: ['مقسوم‌علیه صحیح است', '۱۵ ÷ ۳ = ۵', 'ممیز: ۰٫۵'],
-          answer: '۰٫۵'
-        },
-        {
-          text: '۲٫۴ ÷ ۰٫۶ = ?',
-          html: eq('۲٫۴ ÷ ۰٫۶'),
-          steps: ['مقسوم‌علیه × ۱۰ → ۶', 'مقسوم هم × ۱۰ → ۲۴', '۲۴ ÷ ۶ = ۴'],
-          answer: '۴'
-        }
-      ],
-      tips: [
-        'اگر هر دو عدد را در ۱۰ ضرب کنی، جواب تقسیم تغییر نمی‌کند.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: جابجا نکردن ممیز مقسوم.'
-      ]
+      tips: ['قرض گرفتن از ستون کنار، مثل اعداد صحیح.'],
+      pitfalls: ['اشتباه نکن! همیشه کوچکتر را از بزرگتر کم کن.']
     },
     {
       id: 'frac-to-dec', title: 'کسر به اعشار', emoji: '🔄',
       formula: 'صورت ÷ مخرج',
       paragraphs: [
-        'برای تبدیل یک کسر به عدد اعشاری، کافی است صورت را بر مخرج تقسیم کنیم.',
-        'مثلاً ۳/۴ یعنی ۳ ÷ ۴ = ۰٫۷۵.'
+        'برای تبدیل یک کسر به عدد اعشاری، صورت را بر مخرج تقسیم می‌کنیم.'
       ],
       examples: [
         {
-          text: '۳/۴ را به اعشار تبدیل کن.',
+          text: 'سه‌چهارم را به اعشار تبدیل کن.',
           html: fracHTML({ n: 3, d: 4 }),
           steps: ['۳ ÷ ۴ = ۰٫۷۵'],
-          answer: '۰٫۷۵'
-        },
-        {
-          text: '۱/۸ را به اعشار تبدیل کن.',
-          html: fracHTML({ n: 1, d: 8 }),
-          steps: ['۱ ÷ ۸ = ۰٫۱۲۵'],
-          answer: '۰٫۱۲۵'
+          answer: '= ۰٫۷۵'
         }
       ],
-      tips: [
-        'بعضی کسرها اعشار پایان‌پذیر دارند، بعضی متناوب (۱/۳ = ۰٫۳۳۳...).'
-      ],
-      pitfalls: [
-        'اشتباه رایج: تقسیم مخرج بر صورت.'
-      ]
+      tips: ['بعضی کسرها اعشار پایان‌پذیر دارند (یک‌دوم = ۰٫۵)، بعضی متناوب (یک‌سوم = ۰٫۳۳۳...).'],
+      pitfalls: ['اشتباه نکن! صورت را بر مخرج تقسیم کن، نه برعکس.']
     },
     {
       id: 'dec-to-frac', title: 'اعشار به کسر', emoji: '🔄',
-      formula: 'حذف ممیز / توان ۱۰',
+      formula: 'به‌جای ممیز، ۱۰ یا ۱۰۰ بگذار',
       paragraphs: [
-        'برای تبدیل اعشار به کسر: تعداد ارقام بعد از ممیز را می‌شماریم. اگر ۱ رقم باشد، مخرج ۱۰؛ ۲ رقم، ۱۰۰؛ ۳ رقم، ۱۰۰۰.',
-        'در انتها کسر را ساده می‌کنیم.'
+        'برای تبدیل اعشار به کسر: تعداد رقم‌های بعد از ممیز را بشمار. اگر ۱ رقم باشد، مخرج ۱۰ می‌شود؛ اگر ۲ رقم، مخرج ۱۰۰.'
       ],
       examples: [
         {
           text: '۰٫۷ را به کسر تبدیل کن.',
           html: eq('۰٫۷'),
-          steps: ['۱ رقم اعشار → مخرج ۱۰', 'صورت = ۷', 'کسر: ۷/۱۰'],
-          answer: '۷/۱۰'
+          steps: ['۱ رقم بعد از ممیز → مخرج ۱۰', 'صورت = ۷', 'نتیجه: هفت‌دهم'],
+          answer: `= ${fracHTML({ n: 7, d: 10 })}`
         },
         {
           text: '۰٫۷۵ را به کسر تبدیل کن.',
           html: eq('۰٫۷۵'),
-          steps: ['۲ رقم اعشار → مخرج ۱۰۰', 'صورت = ۷۵', '۷۵/۱۰۰ ساده = ۳/۴'],
-          answer: '۳/۴'
+          steps: [
+            '۲ رقم بعد از ممیز → مخرج ۱۰۰',
+            'صورت = ۷۵',
+            'کسر: هفتادوپنج‌صدم که ساده می‌شود به سه‌چهارم'
+          ],
+          answer: `= ${fracHTML({ n: 3, d: 4 })}`
         }
       ],
-      tips: [
-        'همیشه در انتها ساده کن.'
-      ],
-      pitfalls: [
-        'اشتباه رایج: فراموش کردن ساده کردن در انتها.'
-      ]
+      tips: ['در پایان ساده کن.'],
+      pitfalls: ['اشتباه نکن! تعداد رقم‌های اعشار را درست بشمار.']
     }
   ]
 };
 
 function viewLearn(topic) {
   const lessons = LESSONS[topic];
+  if (!lessons) return `<div class="empty">درسی موجود نیست</div>`;
   return `
   ${header('📚 آموزش', true)}
-  <p style="color:var(--muted);margin:0 0 14px">یک موضوع را انتخاب کن تا درسنامه ببینی:</p>
+  <p style="color:var(--muted);margin:0 0 14px">یک موضوع را انتخاب کن تا یاد بگیری:</p>
   <div class="grid grid-2">
     ${lessons.map(l => `
       <button class="card card-btn" onclick="window.__nav('lesson', {topic:'${topic}', id:'${l.id}'})">
@@ -2490,9 +2693,11 @@ function viewLearn(topic) {
 }
 
 function viewLesson(topic, id) {
-  const lesson = LESSONS[topic].find(l => l.id === id);
-  if (!lesson) return `<div class="empty">درس یافت نشد</div>`;
-  const allIds = LESSONS[topic].map(l => l.id);
+  const lessons = LESSONS[topic];
+  if (!lessons) return `<div class="empty">درس پیدا نشد</div>`;
+  const lesson = lessons.find(l => l.id === id);
+  if (!lesson) return `<div class="empty">درس پیدا نشد</div>`;
+  const allIds = lessons.map(l => l.id);
   const idx = allIds.indexOf(id);
   const nextId = allIds[idx + 1] || null;
   const prevId = allIds[idx - 1] || null;
@@ -2506,12 +2711,12 @@ function viewLesson(topic, id) {
   </div>
 
   <div class="lesson-section">
-    <h3>📖 توضیح</h3>
+    <h3>📖 بیا یاد بگیریم</h3>
     ${lesson.paragraphs.map(p => `<p>${p}</p>`).join('')}
   </div>
 
   <div class="lesson-section">
-    <h3>📌 مثال‌های حل‌شده</h3>
+    <h3>📌 مثال‌ها</h3>
     ${lesson.examples.map((ex, i) => `
       <div class="example-card">
         <p class="ex-title">مثال ${fa(i + 1)}:</p>
@@ -2535,7 +2740,7 @@ function viewLesson(topic, id) {
 
   ${lesson.pitfalls && lesson.pitfalls.length ? `
   <div class="lesson-section">
-    <h3>⚠️ اشتباهات رایج</h3>
+    <h3>⚠️ حواست باشه</h3>
     <ul class="pitfalls-list">
       ${lesson.pitfalls.map(t => `<li>${t}</li>`).join('')}
     </ul>
@@ -2547,13 +2752,13 @@ function viewLesson(topic, id) {
   </div>
 
   <button class="btn success full" style="margin-top:16px" onclick="window.__nav('practice',{topic:'${topic}'})">
-    ✏️ بریم تمرین کنیم!
+    ✏️ بیا تمرین کنیم!
   </button>
   ${bottomNav()}`;
 }
 
 /* ============================================================
-   ۱۸) PRACTICE
+   ۲۰) PRACTICE
    ============================================================ */
 function viewPractice(topic) {
   if (!session || session.mode !== 'practice' || session.topic !== topic) startPractice(topic);
@@ -2569,15 +2774,17 @@ function startPractice(topic) {
   nextPracticeQuestion();
 }
 function nextPracticeQuestion() {
-  session.current = generateQuestion(session.topic, session.difficulty);
+  const q = generateQuestion(session.topic, session.difficulty);
+  if (!q) { session.current = null; return; }
+  session.current = q;
   session.answered = false;
   session.selected = null;
   session.inputValue = '';
 }
 function renderPractice() {
   const q = session.current;
-  if (!q) return `<div class="empty">در حال بارگذاری...</div>`;
-  const names = { perimeter: '📏 محیط', area: '📐 مساحت', fractions: '🍰 کسرها', decimals: '🔢 اعشار' };
+  if (!q) return `<div class="empty"><span class="emoji-big">😅</span>متأسفانه سوالی پیدا نشد.</div>`;
+  const names = { perimeter: '📏 محیط', area: '📐 مساحت', volume: '🧊 حجم', fractions: '🍰 کسرها', decimals: '🔢 اعشار' };
   return `
   ${header(names[session.topic], true)}
   <div class="stats-row">
@@ -2666,14 +2873,14 @@ function finishQuestion(correct) {
   const q = session.current;
   const stu = activeStudent();
   session.answered = true;
-  if (stu) {
+  if (stu && stu.progress[q.topic]) {
     stu.stats.totalQuestions++;
     stu.progress[q.topic].attempts++;
   }
   if (correct) {
     session.correct++;
     session.streak++;
-    if (stu) {
+    if (stu && stu.progress[q.topic]) {
       stu.stats.totalCorrect++;
       if (session.streak > stu.stats.bestStreak) stu.stats.bestStreak = session.streak;
       stu.progress[q.topic].correct++;
@@ -2698,8 +2905,10 @@ function finishQuestion(correct) {
 
   const fb = document.getElementById('feedbackArea');
   if (fb) {
-    const correctDisp = q.type === 'numeric' ? `${faDec(q.answer, 2)}${q.unit ? ' ' + q.unit : ''}` : displayAnswer(q.correct);
-    const title = correct ? pick(['🎉 آفرین!', '✨ درست بود!', '💯 عالی!', '🌟 ادامه بده!']) : '❌ اشکالی نداره، ببین کجا اشتباه کردی:';
+    const correctDisp = q.type === 'numeric'
+      ? `${faDec(q.answer, 2)}${q.unit ? ' ' + q.unit : ''}`
+      : displayAnswer(q.correct);
+    const title = correct ? pick(['🎉 آفرین!', '✨ درست بود!', '💯 عالی!', '🌟 ادامه بده!']) : '❌ اشکالی نداره، بیا با هم ببینیم:';
     fb.innerHTML = `
       <div class="feedback ${correct ? 'good' : 'bad'}">
         <h4>${title}</h4>
@@ -2720,10 +2929,10 @@ function nextQuestionAction() {
 }
 
 /* ============================================================
-   ۱۹) EXAM
+   ۲۱) EXAM
    ============================================================ */
 function viewExamSetup(topic) {
-  const names = { perimeter: 'محیط', area: 'مساحت', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
+  const names = { perimeter: 'محیط', area: 'مساحت', volume: 'حجم', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
   return `
   ${header('🎯 آزمون', true)}
   <div class="card">
@@ -2739,7 +2948,7 @@ function viewExamSetup(topic) {
         ${[60, 180, 300, 600, 900].map(n => `<option value="${n}" ${n === state.settings.examTime ? 'selected' : ''}>${fa(Math.floor(n / 60))} دقیقه</option>`).join('')}
       </select>
     </label>
-    <label style="display:block;margin-top:12px">سطح دشواری:
+    <label style="display:block;margin-top:12px">سطح:
       <select id="examDiff" class="num-input" style="text-align:right">
         <option value="easy" ${state.settings.difficulty === 'easy' ? 'selected' : ''}>آسان</option>
         <option value="medium" ${state.settings.difficulty === 'medium' ? 'selected' : ''}>متوسط</option>
@@ -2755,12 +2964,20 @@ function viewExamSetup(topic) {
   ${bottomNav()}`;
 }
 function startExam(topic) {
-  const count = parseInt(document.getElementById('examCount').value, 10) || 10;
-  const time = parseInt(document.getElementById('examTime').value, 10) || 300;
-  const diff = document.getElementById('examDiff').value || 'medium';
-  const neg = document.getElementById('examNeg').checked;
+  const countEl = document.getElementById('examCount');
+  const timeEl = document.getElementById('examTime');
+  const diffEl = document.getElementById('examDiff');
+  const negEl = document.getElementById('examNeg');
+  const count = parseInt(countEl.value, 10) || 10;
+  const time = parseInt(timeEl.value, 10) || 300;
+  const diff = diffEl.value || 'medium';
+  const neg = negEl.checked;
   const questions = [];
-  for (let i = 0; i < count; i++) questions.push(generateQuestion(topic, diff));
+  for (let i = 0; i < count; i++) {
+    const q = generateQuestion(topic, diff);
+    if (q) questions.push(q);
+  }
+  if (!questions.length) { alert('متأسفانه سوالی پیدا نشد.'); return; }
   session = {
     mode: 'exam', topic, difficulty: diff, questions,
     index: 0, current: questions[0], answers: [],
@@ -2796,8 +3013,8 @@ function viewExam() {
     return `${header('🎯 آزمون')}<div class="empty"><span class="emoji-big">📝</span>آزمونی در جریان نیست</div>${bottomNav()}`;
   }
   const q = session.current;
-  if (!q) return `<div class="empty">خطا</div>`;
-  const names = { perimeter: 'محیط', area: 'مساحت', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
+  if (!q) return `<div class="empty">خطا در بارگذاری</div>`;
+  const names = { perimeter: 'محیط', area: 'مساحت', volume: 'حجم', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
   const min = Math.floor(session.timeLeft / 60);
   const sec = session.timeLeft % 60;
   const timeColor = session.timeLeft < 30 ? 'var(--danger)' : 'var(--primary)';
@@ -2818,7 +3035,7 @@ function viewExam() {
     <button class="btn full" onclick="window.__examNext()">
       ${session.index + 1 >= session.questions.length ? '🏁 پایان آزمون' : '➡️ بعدی'}
     </button>
-    <button class="btn danger" onclick="if(confirm('خروج از آزمون؟')) window.__nav('home')">خروج</button>
+    <button class="btn danger" onclick="if(confirm('از آزمون خارج شوی؟')) window.__nav('home')">خروج</button>
   </div>
   ${bottomNav()}`;
 }
@@ -2854,7 +3071,7 @@ function examNext() {
   session.answers.push({ q, userAns, isCorrect });
   if (isCorrect) session.correct++; else session.wrong++;
   const stu = activeStudent();
-  if (stu) {
+  if (stu && stu.progress[q.topic]) {
     stu.stats.totalQuestions++;
     stu.progress[q.topic].attempts++;
     if (isCorrect) {
@@ -2901,7 +3118,7 @@ function endExam() {
 function viewExamResult() {
   const params = route.params || {};
   const pctv = params.pct, answers = params.answers, topic = params.topic;
-  if (!answers) return `<div class="empty">کارنامه‌ای نیست</div>`;
+  if (!answers) return `<div class="empty">کارنامه‌ای موجود نیست</div>`;
   const correct = answers.filter(a => a.isCorrect).length;
   const wrong = answers.length - correct;
   const emoji = pctv >= 80 ? '🏆' : pctv >= 60 ? '👍' : pctv >= 40 ? '💪' : '📚';
@@ -2953,7 +3170,7 @@ function viewExamResult() {
 }
 
 /* ============================================================
-   ۲۰) PROGRESS
+   ۲۲) PROGRESS
    ============================================================ */
 function viewProgress() {
   const stu = activeStudent();
@@ -2962,6 +3179,7 @@ function viewProgress() {
   const topics = [
     { key: 'perimeter', name: 'محیط', emoji: '📏' },
     { key: 'area', name: 'مساحت', emoji: '📐' },
+    { key: 'volume', name: 'حجم', emoji: '🧊' },
     { key: 'fractions', name: 'کسرها', emoji: '🍰' },
     { key: 'decimals', name: 'اعشار', emoji: '🔢' }
   ];
@@ -2974,6 +3192,7 @@ function viewProgress() {
     'para-p': 'محیط متوازی‌الاضلاع', 'rhom-p': 'محیط لوزی', 'poly-p': 'محیط چندضلعی', 'find-side': 'یافتن ضلع',
     'sq-a': 'مساحت مربع', 'rect-a': 'مساحت مستطیل', 'tri-a': 'مساحت مثلث', 'circ-a': 'مساحت دایره',
     'para-a': 'مساحت متوازی‌الاضلاع', 'rhom-a': 'مساحت لوزی', 'trap-a': 'مساحت ذوزنقه', 'comp-a': 'شکل ترکیبی',
+    'cube-v': 'حجم مکعب', 'box-v': 'حجم مکعب مستطیل', 'find-edge': 'یافتن ضلع مکعب',
     'frac-add': 'جمع کسر', 'frac-sub': 'تفریق کسر', 'frac-mul': 'ضرب کسر', 'frac-div': 'تقسیم کسر',
     'frac-simplify': 'ساده‌کردن', 'frac-cmp': 'مقایسه کسر', 'mixed-imp': 'مخلوط به کسر', 'frac-word': 'مسئله کسری',
     'dec-add': 'جمع اعشار', 'dec-sub': 'تفریق اعشار', 'dec-mul': 'ضرب اعشار', 'dec-div': 'تقسیم اعشار',
@@ -2988,10 +3207,9 @@ function viewProgress() {
   </div>
   <div class="card" style="margin-top:14px">
     <div class="stats-row">
-      <div class="stat-item"><div class="stat-value">${fa(stu.stats.level)}</div><div class="stat-label">سطح</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(overall)}٪</div><div class="stat-label">تسلط</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(stu.stats.bestStreak)}</div><div class="stat-label">رکورد</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(totalC)}</div><div class="stat-label">درست</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(overall)}٪</div><div class="stat-label">تسلط کلی</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(totalC)}</div><div class="stat-label">پاسخ درست</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(totalQ)}</div><div class="stat-label">کل تمرین</div></div>
     </div>
   </div>
   <h3 style="margin:20px 0 10px">📈 تسلط در هر مبحث</h3>
@@ -3008,45 +3226,35 @@ function viewProgress() {
     }).join('')}
   </div>
   ${mistakeList.length ? `
-  <h3 style="margin:20px 0 10px">🎯 نقاط ضعف</h3>
+  <h3 style="margin:20px 0 10px">🎯 این‌ها را باید بیشتر تمرین کنی</h3>
   <div class="card">
     ${mistakeList.map(([k, v]) => {
       const key = k.split(':')[1];
       return `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border)">
         <span>${names[key] || key}</span>
-        <span style="color:var(--danger);font-weight:700">${fa(v)} اشتباه</span>
+        <span style="color:var(--danger);font-weight:700">${fa(v)} بار اشتباه</span>
       </div>`;
     }).join('')}
     <button class="btn info full" style="margin-top:12px" onclick="window.__nav('practice',{topic:'${mistakeList[0][0].split(':')[0]}'})">💡 تمرین پیشنهادی</button>
   </div>` : ''}
-  <h3 style="margin:20px 0 10px">🏆 نشان‌ها</h3>
-  <div class="card">
-    <div style="display:flex;flex-wrap:wrap;gap:10px">
-      ${BADGES.map(b => `
-        <div class="badge ${stu.stats.badges.includes(b.id) ? 'earned' : 'locked'}" title="${b.desc}">
-          <span class="emoji">${b.emoji}</span>
-          <span class="name">${b.name}</span>
-        </div>`).join('')}
-    </div>
-  </div>
   <h3 style="margin:20px 0 10px">📜 تاریخچه آزمون‌ها</h3>
   <div class="card">
     ${stu.history.length ? stu.history.slice(0, 10).map(h => {
       const d = new Date(h.date);
       const dateStr = `${fa(d.getFullYear())}/${fa(d.getMonth() + 1)}/${fa(d.getDate())}`;
-      const tn = { perimeter: 'محیط', area: 'مساحت', fractions: 'کسرها', decimals: 'اعشار' }[h.topic] || h.topic;
+      const tn = { perimeter: 'محیط', area: 'مساحت', volume: 'حجم', fractions: 'کسرها', decimals: 'اعشار' }[h.topic] || h.topic;
       const color = h.score >= 70 ? 'var(--success)' : h.score >= 40 ? 'var(--accent)' : 'var(--danger)';
       return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px dashed var(--border)">
         <span>${dateStr} — ${tn}</span>
         <span style="font-weight:700;color:${color}">${fa(h.score)}٪</span>
       </div>`;
-    }).join('') : '<p style="color:var(--muted);text-align:center">هنوز آزمونی نداده</p>'}
+    }).join('') : '<p style="color:var(--muted);text-align:center">هنوز آزمونی نداده‌ای</p>'}
   </div>
   ${bottomNav()}`;
 }
 
 /* ============================================================
-   ۲۱) SETTINGS
+   ۲۳) SETTINGS
    ============================================================ */
 function viewSettings() {
   const s = state.settings;
@@ -3080,19 +3288,19 @@ function viewSettings() {
     </div>
   </div>
   <div class="card">
-    <h3 class="card-title">👥 مدیریت دانش‌آموزان</h3>
-    <button class="btn info full" onclick="window.__nav('students')">مشاهده‌ی همه دانش‌آموزان</button>
+    <h3 class="card-title">👥 دانش‌آموزان</h3>
+    <button class="btn info full" onclick="window.__nav('students')">مدیریت دانش‌آموزان</button>
   </div>
   <div class="card">
-    <h3 class="card-title">⚠️ منطقه خطر</h3>
+    <h3 class="card-title">⚠️ خطرناک</h3>
     <p class="card-desc">پیشرفت دانش‌آموز فعلی پاک می‌شود.</p>
-    <button class="btn danger full" style="margin-top:10px" onclick="window.__resetActiveStudent()">🗑️ پاک کردن پیشرفت این دانش‌آموز</button>
+    <button class="btn danger full" style="margin-top:10px" onclick="window.__resetActiveStudent()">🗑️ پاک کردن پیشرفت</button>
   </div>
   ${bottomNav()}`;
 }
 
 /* ============================================================
-   ۲۲) TEACHER
+   ۲۴) TEACHER
    ============================================================ */
 function viewTeacher() {
   const stu = activeStudent();
@@ -3104,6 +3312,7 @@ function viewTeacher() {
       <select id="tchTopic" class="num-input" style="text-align:right">
         <option value="perimeter">محیط</option>
         <option value="area">مساحت</option>
+        <option value="volume">حجم</option>
         <option value="fractions">کسرها</option>
         <option value="decimals">اعداد اعشاری</option>
       </select>
@@ -3136,7 +3345,7 @@ function viewTeacher() {
 }
 
 /* ============================================================
-   ۲۳) RENDER
+   ۲۵) RENDER
    ============================================================ */
 function render() {
   document.body.classList.toggle('no-anim', !state.settings.animation);
@@ -3148,8 +3357,10 @@ function render() {
     case 'students': html = viewStudents(); break;
     case 'addStudent': html = viewAddStudent(); break;
     case 'home': html = viewHome(); break;
+    case 'profile': html = viewProfile(); break;
     case 'perimeter':
     case 'area':
+    case 'volume':
     case 'fractions':
     case 'decimals': html = viewTopic(route.name); break;
     case 'learn': html = viewLearn(route.params.topic); break;
@@ -3167,7 +3378,7 @@ function render() {
 }
 
 /* ============================================================
-   ۲۴) GLOBAL FUNCTIONS
+   ۲۶) GLOBAL FUNCTIONS
    ============================================================ */
 window.__nav = (name, params = {}) => { sound.click(); navigate(name, params); };
 window.__goBack = () => {
@@ -3175,7 +3386,7 @@ window.__goBack = () => {
   if (route.name === 'home' || route.name === 'students') return;
   if ((route.name === 'practice' || route.name === 'exam') && session) session = null;
   if (route.name === 'addStudent') { navigate('students'); return; }
-  if (['perimeter', 'area', 'fractions', 'decimals'].includes(route.name)) navigate('home');
+  if (['perimeter', 'area', 'volume', 'fractions', 'decimals'].includes(route.name)) navigate('home');
   else if (route.name === 'lesson') navigate('learn', { topic: route.params.topic });
   else if (['learn', 'practice', 'examSetup'].includes(route.name)) navigate(route.params.topic || 'home');
   else navigate('home');
@@ -3212,13 +3423,25 @@ window.__setSetting = (key, val) => {
   if (key === 'animation') document.body.classList.toggle('no-anim', !val);
   render();
 };
-/* ✅ FIXED: پاک کردن session هنگام تعویض دانش‌آموز */
 window.__selectStudent = (id) => {
   sound.click();
   session = null;
   state.activeStudentId = id;
   saveState();
   navigate('home');
+};
+window.__deleteStudent = (id) => {
+  const stu = state.students.find(s => s.id === id);
+  if (!stu) return;
+  if (!confirm(`مطمئنی می‌خواهی «${fullName(stu)}» را کاملاً حذف کنی؟ این کار قابل بازگشت نیست.`)) return;
+  state.students = state.students.filter(s => s.id !== id);
+  if (state.activeStudentId === id) {
+    state.activeStudentId = state.students.length ? state.students[0].id : null;
+  }
+  saveState();
+  sound.click();
+  showFloat('🗑️ حذف شد');
+  render();
 };
 window.__createStudent = () => {
   const nameEl = document.getElementById('stuName');
@@ -3264,7 +3487,11 @@ window.__teacherStartExam = () => {
   const time = timeMin * 60;
   const diff = diffEl.value;
   const questions = [];
-  for (let i = 0; i < count; i++) questions.push(generateQuestion(topic, diff));
+  for (let i = 0; i < count; i++) {
+    const q = generateQuestion(topic, diff);
+    if (q) questions.push(q);
+  }
+  if (!questions.length) { alert('سوالی پیدا نشد.'); return; }
   session = {
     mode: 'exam', topic, difficulty: diff, questions,
     index: 0, current: questions[0], answers: [],
@@ -3288,7 +3515,7 @@ window.__exportData = () => {
 };
 
 /* ============================================================
-   ۲۵) KEYBOARD
+   ۲۷) KEYBOARD
    ============================================================ */
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && route.name !== 'home' && route.name !== 'students') window.__goBack();
@@ -3299,7 +3526,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 /* ============================================================
-   ۲۶) INIT
+   ۲۸) INIT
    ============================================================ */
 if (state.students.length === 0) {
   route = { name: 'addStudent', params: {} };
