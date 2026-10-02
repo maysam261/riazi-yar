@@ -4,7 +4,7 @@
    ============================================================ */
 'use strict';
 
-const CACHE_VERSION = 'riazi-yar-v1';
+const CACHE_VERSION = 'riazi-yar-v3';
 const APP_SHELL = [
   './',
   './index.html',
