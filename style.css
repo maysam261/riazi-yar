@@ -1,29 +1,17 @@
-/* ==================== پایه ==================== */
+/* ==================== فونت لوکال ==================== */
 @font-face {
   font-family: 'Vazirmatn';
   src: url('fonts/webfonts/Vazirmatn-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-display: swap;
+  font-weight: 400; font-display: swap;
 }
 @font-face {
   font-family: 'Vazirmatn';
   src: url('fonts/webfonts/Vazirmatn-Bold.woff2') format('woff2');
-  font-weight: 700;
-  font-display: swap;
+  font-weight: 700; font-display: swap;
 }
-/* ==================== اعداد و روابط LTR ==================== */
-.eq { direction: ltr; unicode-bidi: isolate; display: inline-block; }
-.eq * { direction: ltr; }
-.formula .num, .formula .op { direction: ltr; unicode-bidi: isolate; }
-/* ... بقیه کدهای style.css از اینجا شروع میشه ... */
+
+/* ==================== پایه ==================== */
 :root {
-  --bg: #f5f3ff;
-  /* ... */
-}
-:root {
-  --bg: #f5f3ff;
-  --bg2: #eef2ff;
-  --card: #ffffff;
   --primary: #7c3aed;
   --primary-d: #5b21b6;
   --primary-l: #c4b5fd;
@@ -35,10 +23,10 @@
   --text: #1e1b4b;
   --muted: #6b7280;
   --border: #e5e7eb;
+  --card: #ffffff;
   --shadow: 0 6px 18px rgba(124,58,237,.10);
   --shadow-lg: 0 10px 30px rgba(124,58,237,.18);
   --radius: 18px;
-  --radius-sm: 12px;
   --trans: .18s ease;
 }
 
@@ -60,6 +48,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 
 #app { max-width: 780px; margin: 0 auto; padding: 12px 14px 100px; }
 
+/* ==================== اعداد LTR ==================== */
+.eq { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.eq * { direction: ltr; }
+
 /* ==================== هدر ==================== */
 .top-bar {
   display: flex; align-items: center; gap: 10px;
@@ -69,7 +61,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
-.top-bar h1 { font-size: 1.15rem; margin: 0; flex: 1; text-align: center; }
+.top-bar h1 { font-size: 1.1rem; margin: 0; flex: 1; text-align: center; }
 .icon-btn {
   width: 44px; height: 44px; border-radius: 14px;
   background: var(--card); box-shadow: var(--shadow);
@@ -79,10 +71,10 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .icon-btn:hover { transform: scale(1.06); }
 .icon-btn:active { transform: scale(.94); }
 
-.chips { display: flex; gap: 8px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .chip {
-  background: var(--card); padding: 4px 12px; border-radius: 999px;
-  font-size: .85rem; box-shadow: var(--shadow); font-weight: 600;
+  background: var(--card); padding: 4px 10px; border-radius: 999px;
+  font-size: .8rem; box-shadow: var(--shadow); font-weight: 600;
   display: inline-flex; align-items: center; gap: 4px;
 }
 
@@ -123,6 +115,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .btn.danger { background: var(--danger); box-shadow: 0 4px 0 #991b1b; }
 .btn.info { background: var(--secondary); box-shadow: 0 4px 0 #0369a1; }
 .btn.warn { background: var(--accent); color: #fff; box-shadow: 0 4px 0 #b45309; }
+.btn.small { padding: 8px 14px; font-size: .85rem; min-height: 38px; }
 .btn.full { width: 100%; }
 .btn:disabled { opacity: .55; cursor: not-allowed; transform: none !important; }
 
@@ -149,7 +142,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .q-prompt { font-size: 1.05rem; font-weight: 600; margin: 0 0 14px; line-height: 1.9; }
 .q-shape { display: grid; place-items: center; margin: 10px 0; }
 
-.shape-svg { max-width: 220px; height: auto; }
+.shape-svg { max-width: 240px; width: 100%; height: auto; }
 .svg-label { font-family: Vazirmatn; font-size: 12px; fill: #312e81; font-weight: 600; }
 .svg-label-lg { font-family: Vazirmatn; font-size: 14px; fill: #312e81; font-weight: 700; }
 
@@ -178,8 +171,18 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
   font-family: inherit; font-size: 1.15rem; font-weight: 700;
   text-align: center; min-height: 54px;
   color: var(--text);
+  width: 100%;
 }
 .num-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(124,58,237,.12); }
+
+select.num-input {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M2 4l5 6 5-6' fill='none' stroke='%237c3aed' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
 
 /* ==================== بازخورد ==================== */
 .feedback {
@@ -217,18 +220,15 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 /* ==================== انیمیشن ==================== */
 @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pop { 0% { transform: scale(.9); opacity: 0; } 60% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
-@keyframes shake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-6px);} 75%{transform:translateX(6px);} }
 @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
 .pop { animation: pop .35s ease; }
-.shake { animation: shake .35s ease; }
 .bounce { animation: bounce .5s ease; }
-
 body.no-anim * { animation: none !important; transition: none !important; }
 
-/* ==================== نمودار میل ==================== */
+/* ==================== نمودار ==================== */
 .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .bar-row .lbl { width: 90px; font-size: .88rem; font-weight: 600; }
-.bar-track { flex: 1; height: 22px; background: #ede9fe; border-radius: 999px; overflow: hidden; position: relative; }
+.bar-track { flex: 1; height: 22px; background: #ede9fe; border-radius: 999px; overflow: hidden; }
 .bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--secondary)); border-radius: 999px; transition: width .5s ease; display: flex; align-items: center; justify-content: flex-end; padding-left: 8px; color: #fff; font-size: .78rem; font-weight: 700; }
 .bar-row .pct { width: 45px; text-align: left; font-weight: 700; font-size: .85rem; color: var(--primary); }
 
@@ -244,12 +244,12 @@ body.no-anim * { animation: none !important; transition: none !important; }
 .badge .emoji { font-size: 1.8rem; }
 .badge .name { font-size: .78rem; font-weight: 700; text-align: center; }
 
-/* ==================== شکل‌های آموزش ==================== */
+/* ==================== فرمول ==================== */
 .formula {
   display: inline-block; padding: 8px 14px; margin: 6px 0;
   background: linear-gradient(135deg, #ede9fe, #dbeafe);
   border-radius: 12px; font-weight: 700; font-size: 1.05rem;
-  color: var(--primary-d); font-family: Vazirmatn;
+  color: var(--primary-d);
 }
 
 /* ==================== فوتر ==================== */
@@ -262,26 +262,12 @@ body.no-anim * { animation: none !important; transition: none !important; }
   padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
 }
 .nav-btn {
-  flex: 1; padding: 6px 4px; display: flex; flex-direction: column;
-  align-items: center; gap: 2px; font-size: .7rem;
+  flex: 1; padding: 6px 2px; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; font-size: .68rem;
   color: var(--muted); font-weight: 600; transition: color var(--trans);
 }
-.nav-btn .ico { font-size: 1.35rem; }
+.nav-btn .ico { font-size: 1.3rem; }
 .nav-btn.active { color: var(--primary); }
-
-/* ==================== مودال ==================== */
-.modal-backdrop {
-  position: fixed; inset: 0; background: rgba(30,27,75,.5);
-  display: grid; place-items: center; z-index: 100;
-  padding: 16px; animation: pop .2s ease;
-}
-.modal {
-  background: var(--card); border-radius: 20px; padding: 24px;
-  max-width: 420px; width: 100%; box-shadow: var(--shadow-lg);
-  text-align: center;
-}
-.modal h3 { margin: 0 0 8px; font-size: 1.3rem; }
-.modal .emoji-big { font-size: 3.5rem; display: block; margin-bottom: 8px; animation: bounce .6s ease; }
 
 /* ==================== پاداش شناور ==================== */
 .float-reward {
@@ -293,26 +279,108 @@ body.no-anim * { animation: none !important; transition: none !important; }
   font-family: Vazirmatn, Tahoma, sans-serif;
 }
 
-/* ==================== رنگ عدد ==================== */
 .correct-text { color: var(--success); font-weight: 800; }
 .wrong-text { color: var(--danger); font-weight: 800; }
-
-/* ==================== صفحه خالی ==================== */
 .empty { text-align: center; padding: 40px 16px; color: var(--muted); }
 .empty .emoji-big { font-size: 3rem; display: block; margin-bottom: 10px; }
 
-/* ==================== اسکرول نرم ==================== */
 html { scroll-behavior: smooth; }
-
-/* ==================== دکمه بازگشت ==================== */
 .back-btn { transform: scaleX(-1); }
 
-/* ==================== select داخل num-input ==================== */
-select.num-input {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 32px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'><path d='M2 4l5 6 5-6' fill='none' stroke='%237c3aed' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
+/* ==================== دانش‌آموزان ==================== */
+.student-card {
+  display: flex; align-items: center; gap: 14px;
+  cursor: pointer;
 }
+.student-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: #fff; display: grid; place-items: center;
+  font-size: 1.5rem; font-weight: 800;
+  flex-shrink: 0;
+}
+.student-info { flex: 1; }
+.student-name { font-weight: 700; font-size: 1.05rem; margin: 0 0 4px; }
+.student-meta { font-size: .82rem; color: var(--muted); margin: 0; }
+
+/* ==================== درسنامه ==================== */
+.lesson-hero {
+  text-align: center;
+  padding: 22px 18px;
+  background: linear-gradient(135deg, #ede9fe, #dbeafe, #cffafe);
+  border-radius: var(--radius);
+  margin-bottom: 16px;
+}
+.lesson-hero .emoji-big { font-size: 3rem; margin-bottom: 6px; }
+.lesson-hero h2 { margin: 0 0 8px; font-size: 1.4rem; }
+.lesson-hero .formula { font-size: 1.15rem; padding: 10px 20px; }
+
+.lesson-section {
+  background: var(--card);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.lesson-section h3 {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  color: var(--primary-d);
+  display: flex; align-items: center; gap: 8px;
+}
+.lesson-section p { margin: 0 0 10px; line-height: 2; text-align: justify; }
+.lesson-section p:last-child { margin-bottom: 0; }
+
+.example-card {
+  background: linear-gradient(135deg, #faf5ff, #eff6ff);
+  border-right: 4px solid var(--primary);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 12px;
+}
+.example-card:last-child { margin-bottom: 0; }
+.example-card .ex-title {
+  font-weight: 700;
+  color: var(--primary-d);
+  margin: 0 0 8px;
+  font-size: .95rem;
+}
+.example-steps {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.example-steps li {
+  padding: 6px 10px;
+  background: rgba(255,255,255,.7);
+  border-radius: 10px;
+  margin-bottom: 4px;
+  font-size: .92rem;
+}
+.example-answer {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: rgba(16,185,129,.12);
+  border-radius: 10px;
+  font-weight: 700;
+  color: #065f46;
+}
+
+.tips-list, .pitfalls-list {
+  margin: 0; padding: 0; list-style: none;
+}
+.tips-list li, .pitfalls-list li {
+  padding: 8px 12px;
+  border-radius: 10px;
+  margin-bottom: 6px;
+  font-size: .92rem;
+  line-height: 1.8;
+}
+.tips-list li { background: #ecfdf5; border-right: 3px solid var(--success); }
+.pitfalls-list li { background: #fef2f2; border-right: 3px solid var(--danger); }
+.tips-list li:last-child, .pitfalls-list li:last-child { margin-bottom: 0; }
+
+.lesson-nav {
+  display: flex; gap: 10px; margin-top: 16px;
+}
+.lesson-nav .btn { flex: 1; }
