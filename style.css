@@ -11,6 +11,10 @@
   font-weight: 700;
   font-display: swap;
 }
+/* ==================== اعداد و روابط LTR ==================== */
+.eq { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.eq * { direction: ltr; }
+.formula .num, .formula .op { direction: ltr; unicode-bidi: isolate; }
 /* ... بقیه کدهای style.css از اینجا شروع میشه ... */
 :root {
   --bg: #f5f3ff;
