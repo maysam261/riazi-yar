@@ -2,10 +2,10 @@
 
 /* ============================================================
    Service Worker — ریاضی‌یار
-   نسخه: v19
+   نسخه: v20
    ============================================================ */
 
-const CACHE_VERSION = 'riazi-yar-v19';
+const CACHE_VERSION = 'riazi-yar-v20';
 
 const APP_SHELL = [
   './',
@@ -29,7 +29,7 @@ self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
       .then(cache => Promise.all(
-        APP_SHELL.map(url => 
+        APP_SHELL.map(url =>
           cache.add(url).catch(err => console.warn('کش نشد:', url, err))
         )
       ))
@@ -61,7 +61,7 @@ self.addEventListener('fetch', (event) => {
   // ناوبری صفحه → اگر آفلاین بود، index.html بیاور
   if (req.mode === 'navigate') {
     event.respondWith(
-      fetch(req).catch(() => 
+      fetch(req).catch(() =>
         caches.match('./index.html').then(r => r || offlineResp())
       )
     );

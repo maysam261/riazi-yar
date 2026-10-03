@@ -32,14 +32,18 @@
   --shadow: 0 6px 18px rgba(124,58,237,.10);
   --shadow-lg: 0 10px 30px rgba(124,58,237,.18);
 
+  /* الگوی سه‌رنگی */
   --shape-fill: #c7d2fe;
   --shape-fill-2: #a5b4fc;
   --shape-fill-3: #fde68a;
   --shape-fill-4: #bbf7d0;
-  --shape-stroke: #ea580c;
-  --shape-accent: #7c3aed;
+  --shape-stroke: #ea580c;      /* 🟧 محیط */
+  --shape-accent: #7c3aed;       /* 🟪 خط اندازه‌گیری */
   --shape-grid: #cbd5e1;
   --shape-blank: #e5e7eb;
+  --shape-angle: #f59e0b;        /* 🟨 علامت زاویه ۹۰° */
+  --shape-unit: #60a5fa;         /* 🟦 مربع‌های واحد */
+  --shape-unit-half: #93c5fd;    /* نیم‌مربع */
 
   --hint-bg: rgba(124,58,237,.10);
   --hint-text: #5b21b6;
@@ -77,6 +81,9 @@
   --shape-accent: #c4b5fd;
   --shape-grid: #4b5563;
   --shape-blank: #374151;
+  --shape-angle: #fbbf24;
+  --shape-unit: #3b82f6;
+  --shape-unit-half: #60a5fa;
 
   --hint-bg: rgba(167,139,250,.15);
   --hint-text: #c4b5fd;
@@ -189,9 +196,11 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .q-prompt { font-size: 1.05rem; font-weight: 600; margin: 0 0 14px; line-height: 1.9; }
 .q-shape { display: grid; place-items: center; margin: 10px 0; }
-.shape-svg { max-width: 240px; width: 100%; height: auto; }
+.shape-svg { max-width: 260px; width: 100%; height: auto; }
 .svg-label { font-family: Vazirmatn; font-size: 12px; fill: var(--shape-stroke); font-weight: 600; }
 .svg-label-lg { font-family: Vazirmatn; font-size: 14px; fill: var(--shape-stroke); font-weight: 700; }
+.svg-label-measure { font-family: Vazirmatn; font-size: 13px; fill: var(--shape-accent); font-weight: 700; }
+.svg-label-angle { font-family: Vazirmatn; font-size: 11px; fill: var(--shape-angle); font-weight: 700; }
 
 /* ============ پاسخ ============ */
 .answer-area { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
@@ -235,6 +244,7 @@ select.num-input {
 .feedback.good { background: var(--feedback-good-bg); border-right: 5px solid var(--success); }
 .feedback.bad { background: var(--feedback-bad-bg); border-right: 5px solid var(--danger); }
 .feedback.warn { background: var(--feedback-warn-bg); border-right: 5px solid var(--accent); }
+.feedback.hint { background: var(--hint-bg); border-right: 5px solid var(--primary); }
 .feedback h4 { margin: 0 0 6px; font-size: 1rem; }
 .feedback p { margin: 6px 0; }
 .steps { margin: 8px 0 0; padding: 0; list-style: none; }
@@ -259,6 +269,7 @@ select.num-input {
 @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pop { 0% { transform: scale(.9); opacity: 0; } 60% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
+@keyframes pulseSoft { 0%,100% { opacity: .35; } 50% { opacity: .65; } }
 
 /* ============ نمودار ============ */
 .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -437,19 +448,89 @@ html { scroll-behavior: smooth; }
 @keyframes fadeInAnim { from { opacity: 0; } to { opacity: 1; } }
 @keyframes popInAnim { 0% { opacity:0; transform:scale(.4); } 60% { opacity:1; transform:scale(1.1); } 100% { opacity:1; transform:scale(1); } }
 @keyframes slideDownAnim { from { opacity:0; transform:translateY(-15px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulseFillAnim { 0%,100% { opacity: .3; } 50% { opacity: .75; } }
+@keyframes labelAppearAnim { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
 
-.anim-draw-loop, .anim-fade-loop, .anim-slide-loop { }
 .anim-pop-loop { transform-box: fill-box; transform-origin: center; }
+.anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out 2; }
+.anim-label-appear { animation: labelAppearAnim .6s ease both; }
 
-.anim-wrap.playing .anim-draw-loop { animation: drawStrokeAnim 2.5s ease-out both; }
-.anim-wrap.playing .anim-fade-loop { animation: fadeInAnim 2s ease both; }
-.anim-wrap.playing .anim-pop-loop { animation: popInAnim 1.8s cubic-bezier(.34,1.56,.64,1) both; }
-.anim-wrap.playing .anim-slide-loop { animation: slideDownAnim 1.5s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-draw-loop { animation: drawStrokeAnim 2.2s ease-out both; }
+.anim-wrap.playing .anim-fade-loop { animation: fadeInAnim 1.8s ease both; }
+.anim-wrap.playing .anim-pop-loop { animation: popInAnim 1.6s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-slide-loop { animation: slideDownAnim 1.4s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out 2; }
+.anim-wrap.playing .anim-label-appear { animation: labelAppearAnim .6s ease both; }
 
 body.no-anim .anim-wrap.playing .anim-draw-loop,
 body.no-anim .anim-wrap.playing .anim-fade-loop,
 body.no-anim .anim-wrap.playing .anim-pop-loop,
-body.no-anim .anim-wrap.playing .anim-slide-loop { animation: none !important; }
+body.no-anim .anim-wrap.playing .anim-slide-loop,
+body.no-anim .anim-wrap.playing .anim-pulse-loop,
+body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important; }
+
+/* ============ راهنمای تدریجی ============ */
+.hint-progressive {
+  background: var(--hint-bg);
+  border-right: 5px solid var(--primary);
+  padding: 12px 14px;
+  border-radius: 12px;
+  margin-top: 12px;
+  font-size: .92rem;
+  animation: slideUp .3s ease;
+}
+.hint-progressive strong { color: var(--primary-d); }
+
+/* ============ چالش روزانه ============ */
+.daily-card {
+  background: linear-gradient(135deg, var(--accent), #f97316);
+  color: #fff;
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 14px;
+  box-shadow: 0 8px 20px rgba(245,158,11,.35);
+}
+.daily-card h3 { margin: 0 0 6px; font-size: 1.1rem; }
+.daily-card p { margin: 0 0 12px; font-size: .88rem; opacity: .95; }
+.daily-btn {
+  background: #fff; color: #b45309;
+  padding: 10px 20px; border-radius: 999px;
+  font-weight: 800; font-size: .95rem;
+  box-shadow: 0 4px 0 rgba(0,0,0,.15);
+}
+.daily-btn:disabled { opacity: .6; cursor: not-allowed; }
+
+/* ============ چک‌لیست بصری ============ */
+.checklist {
+  background: var(--card-2);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 10px 0;
+  border: 1px solid var(--border);
+}
+.checklist h4 { margin: 0 0 8px; font-size: .95rem; color: var(--primary-d); display: flex; align-items: center; gap: 6px; }
+.checklist ul { margin: 0; padding: 0; list-style: none; }
+.checklist li { padding: 4px 0; font-size: .9rem; display: flex; align-items: flex-start; gap: 8px; }
+.checklist li::before { content: '✓'; color: var(--success); font-weight: 800; flex-shrink: 0; }
+
+/* ============ دکمه‌ی صداگذاری ============ */
+.tts-btn {
+  width: 36px; height: 36px; border-radius: 12px;
+  background: var(--hint-bg); color: var(--primary-d);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem; margin-right: 6px;
+  border: none; cursor: pointer;
+}
+
+/* ============ حالت debug ============ */
+.debug-panel {
+  background: #1e1e2e; color: #a6e3a1;
+  font-family: 'Courier New', monospace;
+  font-size: .78rem; direction: ltr; text-align: left;
+  padding: 12px; border-radius: 12px;
+  margin-top: 12px; max-height: 220px; overflow: auto;
+}
 
 /* ============ تم ============ */
 body, .card, .question-box, .lesson-section, .num-input, .choice, .pill, .bottom-nav, .top-bar {
