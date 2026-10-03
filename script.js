@@ -1,5 +1,9 @@
 /* =============================================================
-   ریاضی‌یار — نسخه ۹.۰ (انیمیشن لوپ‌شونده)
+   ریاضی‌یار — نسخه ۱۰.۰
+   - انیمیشن با کلیک (نه لوپ)
+   - دکمه نصب فقط در خانه
+   - نام نمونه: علی نوری
+   - ارتباط با تهیه‌کننده
    ============================================================= */
 (function () {
 'use strict';
@@ -117,81 +121,83 @@ function pct(unit) { return unit ? ' ' + unit : ''; }
 function numOr(v, fallback) { return typeof v === 'number' && v > 0 ? v : fallback; }
 
 /* ============================================================
-   ۳) ANIMATION STYLES — Loop-based
+   ۳) ANIMATION STYLES — Click-to-play
    ============================================================ */
 function ensureAnimStyles() {
   if (document.getElementById('riazi-anim-styles')) return;
   const s = document.createElement('style');
   s.id = 'riazi-anim-styles';
   s.textContent = `
-    /* ============ Keyframes: Loop with long hold phase ============ */
-    @keyframes drawStrokeLoop {
-      0%   { stroke-dashoffset: var(--len, 500); }
-      18%  { stroke-dashoffset: 0; }                /* 0-2.16s draw */
-      94%  { stroke-dashoffset: 0; }                /* hold 9.1s */
-      100% { stroke-dashoffset: var(--len, 500); }  /* reset */
+    /* ============ Keyframes (یک‌بار اجرا، نه لوپ) ============ */
+    @keyframes drawStrokeAnim {
+      from { stroke-dashoffset: var(--len, 500); }
+      to   { stroke-dashoffset: 0; }
     }
-    @keyframes popInLoop {
+    @keyframes fadeInAnim {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes popInAnim {
       0%   { opacity: 0; transform: scale(0.4); }
-      3%   { opacity: 1; transform: scale(1.15); }  /* 0-0.36s pop */
-      5%   { opacity: 1; transform: scale(1); }     /* settle */
-      94%  { opacity: 1; transform: scale(1); }     /* hold */
-      100% { opacity: 0; transform: scale(0.4); }   /* fade */
+      60%  { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 1; transform: scale(1); }
     }
-    @keyframes fadeInLoop {
-      0%   { opacity: 0; }
-      15%  { opacity: 1; }                          /* 0-1.8s fade in */
-      94%  { opacity: 1; }                          /* hold */
-      100% { opacity: 0; }                          /* fade out */
-    }
-    @keyframes slideDownLoop {
-      0%   { opacity: 0; transform: translateY(-15px); }
-      10%  { opacity: 1; transform: translateY(0); } /* 0-1.2s slide */
-      94%  { opacity: 1; transform: translateY(0); } /* hold */
-      100% { opacity: 0; transform: translateY(-15px); }
+    @keyframes slideDownAnim {
+      from { opacity: 0; transform: translateY(-15px); }
+      to   { opacity: 1; transform: translateY(0); }
     }
 
-    /* ============ Loop classes ============ */
-    .anim-draw-loop {
-      stroke-dashoffset: var(--len, 500);
-      animation: drawStrokeLoop 12s ease-out infinite;
-    }
-    .anim-fade-loop {
-      opacity: 0;
-      animation: fadeInLoop 12s ease infinite;
-    }
+    /* ============ حالت پیش‌فرض: کاملاً نمایش‌داده‌شده ============ */
+    .anim-draw-loop  { /* stroke-dashoffset پیش‌فرض ۰ است */ }
+    .anim-fade-loop  { /* opacity پیش‌فرض ۱ است */ }
+    .anim-slide-loop { /* opacity پیش‌فرض ۱ است */ }
     .anim-pop-loop {
-      opacity: 0;
       transform-box: fill-box;
       transform-origin: center;
-      animation: popInLoop 12s cubic-bezier(.34,1.56,.64,1) infinite;
-    }
-    .anim-slide-loop {
-      opacity: 0;
-      animation: slideDownLoop 12s cubic-bezier(.34,1.56,.64,1) infinite;
     }
 
-    /* ============ Performance hints ============ */
-    .anim-pop-loop,
-    .anim-slide-loop {
-      will-change: opacity, transform;
+    /* ============ کانتینر کلیک‌پذیر ============ */
+    .anim-wrap {
+      cursor: pointer;
+      border-radius: 14px;
+      transition: background 0.15s ease;
+      -webkit-tap-highlight-color: transparent;
+      padding: 6px 4px;
     }
-    .anim-fade-loop {
-      will-change: opacity;
+    .anim-wrap:active {
+      background: rgba(124,58,237,0.08);
+      transform: scale(0.985);
     }
-    .anim-draw-loop {
-      will-change: stroke-dashoffset;
+    .anim-hint {
+      font-size: .75rem;
+      color: var(--muted);
+      margin: 6px 0 0;
+      user-select: none;
+      text-align: center;
+      font-weight: 500;
+      pointer-events: none;
     }
 
-    /* ============ Reduced motion ============ */
-    body.no-anim .anim-draw-loop,
-    body.no-anim .anim-fade-loop,
-    body.no-anim .anim-pop-loop,
-    body.no-anim .anim-slide-loop {
+    /* ============ انیمیشن فقط در حالت playing ============ */
+    .anim-wrap.playing .anim-draw-loop {
+      animation: drawStrokeAnim 2.5s ease-out both;
+    }
+    .anim-wrap.playing .anim-fade-loop {
+      animation: fadeInAnim 2s ease both;
+    }
+    .anim-wrap.playing .anim-pop-loop {
+      animation: popInAnim 1.8s cubic-bezier(.34,1.56,.64,1) both;
+    }
+    .anim-wrap.playing .anim-slide-loop {
+      animation: slideDownAnim 1.5s cubic-bezier(.34,1.56,.64,1) both;
+    }
+
+    /* ============ حالت بدون انیمیشن ============ */
+    body.no-anim .anim-wrap.playing .anim-draw-loop,
+    body.no-anim .anim-wrap.playing .anim-fade-loop,
+    body.no-anim .anim-wrap.playing .anim-pop-loop,
+    body.no-anim .anim-wrap.playing .anim-slide-loop {
       animation: none !important;
-      opacity: 1 !important;
-      stroke-dashoffset: 0 !important;
-      transform: none !important;
     }
   `;
   document.head.appendChild(s);
@@ -651,7 +657,7 @@ const Shapes = {
 };
 
 /* ============================================================
-   ۸) ANIMATED SHAPES — LOOP version
+   ۸) ANIMATED SHAPES — click-to-play
    ============================================================ */
 const ShapesAnim = {
   tracingSquare(side) {
@@ -713,7 +719,6 @@ const ShapesAnim = {
     const rw = wNum * s, rh = hNum * s;
     const x = (W - rw) / 2, y = (H - rh) / 2;
     let grid = '';
-    const total = wNum * hNum;
     for (let j = 0; j < hNum; j++) {
       for (let i = 0; i < wNum; i++) {
         const idx = j * wNum + i;
@@ -831,7 +836,26 @@ const ShapesAnim = {
 };
 
 /* ============================================================
-   ۹) DIFFICULTY
+   ۹) WRAP ANIM — برای شکل‌های درسنامه
+   ============================================================ */
+function wrapAnim(html, opts) {
+  opts = opts || {};
+  if (!html) return '';
+  const hasAnim = /anim-(draw|fade|pop|slide)-loop/.test(html);
+  const wrapClass = (opts.wrapClass !== undefined) ? opts.wrapClass : 'q-shape';
+  const wrapStyle = opts.wrapStyle || '';
+  const className = wrapClass + (hasAnim ? ' anim-wrap' : '');
+  const classAttr = className ? ` class="${className}"` : '';
+  const styleAttr = wrapStyle ? ` style="${wrapStyle}"` : '';
+  const clickAttr = hasAnim
+    ? ` onclick="window.__playAnim(this)" role="button" tabindex="0" aria-label="برای دیدن انیمیشن، بزن"`
+    : '';
+  const hint = hasAnim ? '<p class="anim-hint">👆 برای دیدن انیمیشن، بزن</p>' : '';
+  return `<div${classAttr}${styleAttr}${clickAttr}>${html}${hint}</div>`;
+}
+
+/* ============================================================
+   ۱۰) DIFFICULTY
    ============================================================ */
 function diffRange(diff) {
   if (diff === 'easy') return [2, 6];
@@ -840,7 +864,7 @@ function diffRange(diff) {
 }
 
 /* ============================================================
-   ۱۰) CONTEXTS
+   ۱۱) CONTEXTS
    ============================================================ */
 const CTX_P = {
   square: [
@@ -923,7 +947,7 @@ const CTX_FR = [
 ];
 
 /* ============================================================
-   ۱۱) PERIMETER GENERATORS
+   ۱۲) PERIMETER GENERATORS
    ============================================================ */
 function genSquarePerimeter(diff) {
   const [a, b] = diffRange(diff);
@@ -1109,7 +1133,7 @@ function genFindSideFromPerimeter(diff) {
 genFindSideFromPerimeter.levels = ['hard'];
 
 /* ============================================================
-   ۱۲) AREA GENERATORS
+   ۱۳) AREA GENERATORS
    ============================================================ */
 function genSquareArea(diff) {
   const [a, b] = diffRange(diff);
@@ -1325,7 +1349,7 @@ function genCompositeArea(diff) {
 genCompositeArea.levels = ['hard'];
 
 /* ============================================================
-   ۱۳) VOLUME GENERATORS
+   ۱۴) VOLUME GENERATORS
    ============================================================ */
 function genCubeVolume(diff) {
   const [a, b] = diffRange(diff);
@@ -1403,7 +1427,7 @@ function genFindEdgeFromVolume(diff) {
 genFindEdgeFromVolume.levels = ['hard'];
 
 /* ============================================================
-   ۱۴) FRACTION GENERATORS
+   ۱۵) FRACTION GENERATORS
    ============================================================ */
 function makeFracChoices(correct, genWrong, count = 3) {
   const opts = [correct];
@@ -1661,7 +1685,7 @@ function genWordFrac(diff) {
 genWordFrac.levels = ['hard'];
 
 /* ============================================================
-   ۱۵) DECIMALS GENERATORS
+   ۱۶) DECIMALS GENERATORS
    ============================================================ */
 function genDecAdd(diff) {
   const cfg = { easy: [1, 5, 1], medium: [2, 7, 1], hard: [3, 9, 2] };
@@ -1851,7 +1875,7 @@ function genDecWord(diff) {
 genDecWord.levels = ['hard'];
 
 /* ============================================================
-   ۱۶) GENERATOR POOL
+   ۱۷) GENERATOR POOL
    ============================================================ */
 const Generators = {
   perimeter: [genSquarePerimeter, genRectPerimeter, genTrianglePerimeter, genCirclePerimeter, genParallelogramPerimeter, genRhombusPerimeter, genPolygonPerimeter, genFindSideFromPerimeter],
@@ -1881,7 +1905,7 @@ function generateQuestion(topic, difficulty) {
 }
 
 /* ============================================================
-   ۱۷) GAMIFICATION
+   ۱۸) GAMIFICATION
    ============================================================ */
 const BADGES = [
   { id: 'first', emoji: '🎯', name: 'اولین قدم', desc: 'اولین پاسخ درست' },
@@ -1946,7 +1970,7 @@ function showFloat(text) {
 }
 
 /* ============================================================
-   ۱۸) ROUTER
+   ۱۹) ROUTER
    ============================================================ */
 let route = { name: 'home', params: {} };
 let session = null;
@@ -1954,7 +1978,7 @@ let examTimer = null;
 
 function navigate(name, params = {}) {
   if (examTimer) { clearInterval(examTimer); examTimer = null; }
-  if (session && ['students', 'addStudent', 'home', 'profile'].includes(name)) {
+  if (session && ['students', 'addStudent', 'home', 'profile', 'contact'].includes(name)) {
     session = null;
   }
   route = { name, params };
@@ -1963,7 +1987,7 @@ function navigate(name, params = {}) {
 }
 
 /* ============================================================
-   ۱۹) COMMON
+   ۲۰) COMMON
    ============================================================ */
 const app = document.getElementById('app');
 
@@ -1996,7 +2020,7 @@ function bottomNav() {
 }
 
 /* ============================================================
-   ۲۰) STUDENTS
+   ۲۱) STUDENTS
    ============================================================ */
 function viewStudents() {
   const hasStudents = state.students.length > 0;
@@ -2037,7 +2061,7 @@ function viewAddStudent() {
     </label>
     <label style="display:block;margin-bottom:14px">
       <span style="font-weight:600;font-size:.95rem">نام خانوادگی (اختیاری):</span>
-      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-size:1.05rem;font-weight:400;margin-top:6px" placeholder="مثلاً محمدی" maxlength="20">
+      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-size:1.05rem;font-weight:400;margin-top:6px" placeholder="مثلاً نوری" maxlength="20">
     </label>
     <label style="display:block;margin-bottom:14px">
       <span style="font-weight:600;font-size:.95rem">پایه تحصیلی:</span>
@@ -2053,7 +2077,7 @@ function viewAddStudent() {
 }
 
 /* ============================================================
-   ۲۱) HOME / PROFILE / TOPIC
+   ۲۲) HOME / PROFILE / TOPIC / CONTACT
    ============================================================ */
 function viewHome() {
   return `
@@ -2137,6 +2161,14 @@ function viewProfile() {
     <button class="btn sec full" onclick="window.__nav('students')">🔄 تغییر دانش‌آموز</button>
     <button class="btn info full" onclick="window.__nav('settings')">⚙️ تنظیمات</button>
   </div>
+
+  <!-- کارت تهیه‌کننده و ارتباط -->
+  <div class="card" style="text-align:center;margin-top:14px">
+    <p style="color:var(--muted);font-size:.85rem;margin:0 0 10px">
+      ساخته شده با ❤️ توسط <strong>maysam261</strong>
+    </p>
+    <button class="btn info full" onclick="window.__nav('contact')">📞 ارتباط با تهیه‌کننده</button>
+  </div>
   ${bottomNav()}`;
 }
 
@@ -2172,8 +2204,50 @@ function viewTopic(topic) {
   ${bottomNav()}`;
 }
 
+function viewContact() {
+  return `
+  ${header('📞 ارتباط با تهیه‌کننده', true)}
+  <div class="card" style="text-align:center">
+    <div style="font-size:3.5rem;margin-bottom:8px">👨‍💻</div>
+    <h2 style="margin:8px 0;direction:ltr">maysam261</h2>
+    <p style="color:var(--muted);margin:0">تهیه‌کننده‌ی ریاضی‌یار</p>
+  </div>
+  <p style="color:var(--muted);margin:16px 0 10px;text-align:center;font-size:.9rem">
+    برای ارتباط با تهیه‌کننده، از راه‌های زیر استفاده کن:
+  </p>
+  <div class="grid">
+    <a href="https://t.me/MaySam261" target="_blank" rel="noopener" class="card card-btn" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:14px">
+      <span style="font-size:2.2rem">✈️</span>
+      <div style="flex:1">
+        <h3 class="card-title" style="margin:0 0 4px">تلگرام</h3>
+        <p class="card-desc" style="margin:0;direction:ltr;text-align:left">t.me/MaySam261</p>
+      </div>
+    </a>
+    <a href="https://ble.ir/maysam261" target="_blank" rel="noopener" class="card card-btn" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:14px">
+      <span style="font-size:2.2rem">💚</span>
+      <div style="flex:1">
+        <h3 class="card-title" style="margin:0 0 4px">بله</h3>
+        <p class="card-desc" style="margin:0;direction:ltr;text-align:left">ble.ir/maysam261</p>
+      </div>
+    </a>
+    <a href="https://eitaa.com/maysam261" target="_blank" rel="noopener" class="card card-btn" style="text-decoration:none;color:inherit;display:flex;align-items:center;gap:14px">
+      <span style="font-size:2.2rem">📘</span>
+      <div style="flex:1">
+        <h3 class="card-title" style="margin:0 0 4px">ایتا</h3>
+        <p class="card-desc" style="margin:0;direction:ltr;text-align:left">eitaa.com/maysam261</p>
+      </div>
+    </a>
+  </div>
+  <div class="card" style="margin-top:14px;text-align:center;background:linear-gradient(135deg,#faf5ff,#eff6ff);border:2px solid var(--primary-l)">
+    <p style="margin:0;font-size:.9rem;color:var(--primary-d);font-weight:500">
+      💌 خوشحال می‌شوم نظرات و پیشنهادهایت را بشنوم!
+    </p>
+  </div>
+  ${bottomNav()}`;
+}
+
 /* ============================================================
-   ۲۲) LESSONS — همان LESSONS نسخه ۸.۰
+   ۲۳) LESSONS
    ============================================================ */
 const LESSONS = {
   perimeter: [
@@ -3043,8 +3117,8 @@ function viewLesson(topic, id) {
       <div class="example-card">
         <p class="ex-title">مثال ${fa(i + 1)}:</p>
         <p>${ex.text}</p>
-        ${ex.shape ? `<div class="q-shape">${ex.shape}</div>` : ''}
-        ${ex.html ? `<div style="text-align:center;font-size:1.2rem;padding:8px">${ex.html}</div>` : ''}
+        ${wrapAnim(ex.shape)}
+        ${wrapAnim(ex.html, { wrapClass: '', wrapStyle: 'text-align:center;padding:8px' })}
         <ul class="example-steps">
           ${ex.steps.map(s => `<li>${s}</li>`).join('')}
         </ul>
@@ -3080,7 +3154,7 @@ function viewLesson(topic, id) {
 }
 
 /* ============================================================
-   ۲۳) PRACTICE
+   ۲۴) PRACTICE
    ============================================================ */
 function viewPractice(topic) {
   if (!session || session.mode !== 'practice' || session.topic !== topic) startPractice(topic);
@@ -3241,7 +3315,7 @@ function nextQuestionAction() {
 }
 
 /* ============================================================
-   ۲۴) EXAM SETUP
+   ۲۵) EXAM SETUP
    ============================================================ */
 function viewExamSetup(topic) {
   const names = { perimeter: 'محیط', area: 'مساحت', volume: 'حجم', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
@@ -3275,7 +3349,7 @@ function viewExamSetup(topic) {
   </div>
   <div class="card" style="background:#fef3c7;border-right:4px solid var(--accent)">
     <p style="margin:0;font-size:.9rem">
-      ⚠️ <strong>نمره منفی:</strong> برای هر ۳ پاسخ غلط، ۱ نمره کم می‌شود. سوالات بی‌پاسخ حساب نمی‌شوند.
+      ⚠️ <strong>نمره منفی:</strong> برای هر ۳ پاسخ غلط، ۱ نمره کم می‌شود.
     </p>
   </div>
   <button class="btn full" style="margin-top:16px" onclick="window.__startExam('${topic}')">🚀 شروع آزمون</button>
@@ -3308,7 +3382,7 @@ function startExam(topic) {
 }
 
 /* ============================================================
-   ۲۵) MULTI-TOPIC EXAM
+   ۲۶) MULTI-TOPIC EXAM
    ============================================================ */
 function viewMultiExamSetup() {
   return `
@@ -3399,7 +3473,7 @@ function startMultiExam() {
 }
 
 /* ============================================================
-   ۲۶) EXAM VIEW
+   ۲۷) EXAM VIEW
    ============================================================ */
 function startExamTimer() {
   if (examTimer) clearInterval(examTimer);
@@ -3606,7 +3680,7 @@ function viewExamResult() {
 }
 
 /* ============================================================
-   ۲۷) PROGRESS
+   ۲۸) PROGRESS
    ============================================================ */
 function viewProgress() {
   const stu = activeStudent();
@@ -3684,7 +3758,7 @@ function viewProgress() {
 }
 
 /* ============================================================
-   ۲۸) SETTINGS
+   ۲۹) SETTINGS
    ============================================================ */
 function viewSettings() {
   const s = state.settings;
@@ -3721,6 +3795,14 @@ function viewSettings() {
     <h3 class="card-title">👥 دانش‌آموزان</h3>
     <button class="btn info full" onclick="window.__nav('students')">مدیریت دانش‌آموزان</button>
   </div>
+
+  <!-- کارت تهیه‌کننده و ارتباط -->
+  <div class="card" style="text-align:center">
+    <h3 class="card-title" style="justify-content:center">💬 ارتباط با تهیه‌کننده</h3>
+    <p class="card-desc" style="margin:0 0 12px">ساخته شده با ❤️ توسط <strong style="direction:ltr;display:inline-block">maysam261</strong></p>
+    <button class="btn info full" onclick="window.__nav('contact')">📞 مشاهده راه‌های ارتباطی</button>
+  </div>
+
   <div class="card">
     <h3 class="card-title">⚠️ خطرناک</h3>
     <p class="card-desc">پیشرفت دانش‌آموز فعلی پاک می‌شود.</p>
@@ -3730,7 +3812,7 @@ function viewSettings() {
 }
 
 /* ============================================================
-   ۲۹) TEACHER
+   ۳۰) TEACHER
    ============================================================ */
 function viewTeacher() {
   const stu = activeStudent();
@@ -3771,7 +3853,7 @@ function viewTeacher() {
 }
 
 /* ============================================================
-   ۳۰) RENDER
+   ۳۱) RENDER
    ============================================================ */
 function render() {
   document.body.classList.toggle('no-anim', !state.settings.animation);
@@ -3784,6 +3866,7 @@ function render() {
     case 'addStudent': html = viewAddStudent(); break;
     case 'home': html = viewHome(); break;
     case 'profile': html = viewProfile(); break;
+    case 'contact': html = viewContact(); break;
     case 'perimeter':
     case 'area':
     case 'volume':
@@ -3802,10 +3885,16 @@ function render() {
     default: html = activeStudent() ? viewHome() : viewStudents();
   }
   app.innerHTML = html;
+
+  // به‌روزرسانی دکمه نصب (فقط در خانه)
+  window.__currentRoute = route.name;
+  if (typeof window.__updateInstallBtn === 'function') {
+    window.__updateInstallBtn();
+  }
 }
 
 /* ============================================================
-   ۳۱) GLOBAL FUNCTIONS
+   ۳۲) GLOBAL FUNCTIONS
    ============================================================ */
 window.__nav = (name, params = {}) => { sound.click(); navigate(name, params); };
 window.__goBack = () => {
@@ -3831,6 +3920,18 @@ window.__selectChoice = (i) => {
   session.selected = session.current.choices[i];
   document.querySelectorAll('.choice').forEach((el, idx) => el.classList.toggle('selected', idx === i));
 };
+
+// ✅ پخش انیمیشن با کلیک
+window.__playAnim = (el) => {
+  if (!el) return;
+  el.classList.remove('playing');
+  // اجبار به reflow برای ریست انیمیشن
+  void el.offsetWidth;
+  el.classList.add('playing');
+  // صدای کلیک ملایم
+  sound.click();
+};
+
 window.__submitOrNext = () => {
   if (!session) return;
   if (session.answered) nextQuestionAction();
@@ -3938,7 +4039,7 @@ window.__exportData = () => {
 };
 
 /* ============================================================
-   ۳۲) KEYBOARD
+   ۳۳) KEYBOARD
    ============================================================ */
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && route.name !== 'home' && route.name !== 'students') window.__goBack();
@@ -3946,10 +4047,16 @@ document.addEventListener('keydown', (e) => {
     const ae = document.activeElement;
     if (ae && ae.tagName === 'INPUT') window.__createStudent();
   }
+  // Space/Enter روی shape‌های درسی
+  if ((e.key === ' ' || e.key === 'Enter') && document.activeElement &&
+      document.activeElement.classList && document.activeElement.classList.contains('anim-wrap')) {
+    e.preventDefault();
+    window.__playAnim(document.activeElement);
+  }
 });
 
 /* ============================================================
-   ۳۳) INIT
+   ۳۴) INIT
    ============================================================ */
 ensureAnimStyles();
 
