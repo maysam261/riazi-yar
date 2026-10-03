@@ -1,7 +1,5 @@
 /* =============================================================
-   ریاضی‌یار — نسخه ۸.۰
-   - گزینه‌های هوشمند (مفهومی)
-   - بررسی مؤخر در آزمون
+   ریاضی‌یار — نسخه ۹.۰ (انیمیشن لوپ‌شونده)
    ============================================================= */
 (function () {
 'use strict';
@@ -119,46 +117,77 @@ function pct(unit) { return unit ? ' ' + unit : ''; }
 function numOr(v, fallback) { return typeof v === 'number' && v > 0 ? v : fallback; }
 
 /* ============================================================
-   ۳) ANIMATION STYLES
+   ۳) ANIMATION STYLES — Loop-based
    ============================================================ */
 function ensureAnimStyles() {
   if (document.getElementById('riazi-anim-styles')) return;
   const s = document.createElement('style');
   s.id = 'riazi-anim-styles';
   s.textContent = `
-    @keyframes drawStroke {
-      from { stroke-dashoffset: var(--len, 500); }
-      to { stroke-dashoffset: 0; }
+    /* ============ Keyframes: Loop with long hold phase ============ */
+    @keyframes drawStrokeLoop {
+      0%   { stroke-dashoffset: var(--len, 500); }
+      18%  { stroke-dashoffset: 0; }                /* 0-2.16s draw */
+      94%  { stroke-dashoffset: 0; }                /* hold 9.1s */
+      100% { stroke-dashoffset: var(--len, 500); }  /* reset */
     }
-    @keyframes fadeInSlow { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes popIn {
-      0% { opacity: 0; transform: scale(0.4); }
-      60% { transform: scale(1.1); }
-      100% { opacity: 1; transform: scale(1); }
+    @keyframes popInLoop {
+      0%   { opacity: 0; transform: scale(0.4); }
+      3%   { opacity: 1; transform: scale(1.15); }  /* 0-0.36s pop */
+      5%   { opacity: 1; transform: scale(1); }     /* settle */
+      94%  { opacity: 1; transform: scale(1); }     /* hold */
+      100% { opacity: 0; transform: scale(0.4); }   /* fade */
     }
-    @keyframes slideDown {
-      from { opacity: 0; transform: translateY(-10px); }
-      to { opacity: 1; transform: translateY(0); }
+    @keyframes fadeInLoop {
+      0%   { opacity: 0; }
+      15%  { opacity: 1; }                          /* 0-1.8s fade in */
+      94%  { opacity: 1; }                          /* hold */
+      100% { opacity: 0; }                          /* fade out */
     }
-    .anim-draw {
+    @keyframes slideDownLoop {
+      0%   { opacity: 0; transform: translateY(-15px); }
+      10%  { opacity: 1; transform: translateY(0); } /* 0-1.2s slide */
+      94%  { opacity: 1; transform: translateY(0); } /* hold */
+      100% { opacity: 0; transform: translateY(-15px); }
+    }
+
+    /* ============ Loop classes ============ */
+    .anim-draw-loop {
       stroke-dashoffset: var(--len, 500);
-      animation: drawStroke 2s ease-out forwards;
+      animation: drawStrokeLoop 12s ease-out infinite;
     }
-    .anim-fade { opacity: 0; animation: fadeInSlow 1.2s ease forwards; }
-    .anim-pop {
+    .anim-fade-loop {
+      opacity: 0;
+      animation: fadeInLoop 12s ease infinite;
+    }
+    .anim-pop-loop {
       opacity: 0;
       transform-box: fill-box;
       transform-origin: center;
-      animation: popIn 0.55s cubic-bezier(.34,1.56,.64,1) forwards;
+      animation: popInLoop 12s cubic-bezier(.34,1.56,.64,1) infinite;
     }
-    .anim-slide {
+    .anim-slide-loop {
       opacity: 0;
-      animation: slideDown 0.7s cubic-bezier(.34,1.56,.64,1) forwards;
+      animation: slideDownLoop 12s cubic-bezier(.34,1.56,.64,1) infinite;
     }
-    body.no-anim .anim-draw,
-    body.no-anim .anim-fade,
-    body.no-anim .anim-pop,
-    body.no-anim .anim-slide {
+
+    /* ============ Performance hints ============ */
+    .anim-pop-loop,
+    .anim-slide-loop {
+      will-change: opacity, transform;
+    }
+    .anim-fade-loop {
+      will-change: opacity;
+    }
+    .anim-draw-loop {
+      will-change: stroke-dashoffset;
+    }
+
+    /* ============ Reduced motion ============ */
+    body.no-anim .anim-draw-loop,
+    body.no-anim .anim-fade-loop,
+    body.no-anim .anim-pop-loop,
+    body.no-anim .anim-slide-loop {
       animation: none !important;
       opacity: 1 !important;
       stroke-dashoffset: 0 !important;
@@ -246,7 +275,7 @@ function displayCorrectWithUnit(q) {
 }
 
 /* ============================================================
-   ۶) NUMERIC → CHOICE (SMART DISTRACTORS)
+   ۶) NUMERIC → CHOICE (SMART)
    ============================================================ */
 function fallbackDistractors(correct) {
   const isInt = Number.isInteger(correct);
@@ -266,7 +295,6 @@ function fallbackDistractors(correct) {
     seen.add(w);
     wrongs.push(w);
   }
-
   let n = 1;
   while (wrongs.length < 3) {
     const w = round(correct + n * (isInt ? 1 : 0.5), dec);
@@ -289,7 +317,6 @@ function numericToChoice(q) {
   let wrongs = [];
   const seen = new Set([correct]);
 
-  // از distractors استفاده کن اگر داده شده
   if (Array.isArray(q.distractors)) {
     for (const w of q.distractors) {
       if (wrongs.length >= 3) break;
@@ -301,8 +328,6 @@ function numericToChoice(q) {
       wrongs.push(rw);
     }
   }
-
-  // اگر کمتر از ۳ شد، با fallback پر کن
   if (wrongs.length < 3) {
     const fb = fallbackDistractors(correct);
     for (const w of fb) {
@@ -312,7 +337,6 @@ function numericToChoice(q) {
       wrongs.push(w);
     }
   }
-
   wrongs = wrongs.slice(0, 3);
   const allOpts = shuffle([correct, ...wrongs]);
   return {
@@ -325,7 +349,7 @@ function numericToChoice(q) {
 }
 
 /* ============================================================
-   ۷) SHAPES
+   ۷) SHAPES (static)
    ============================================================ */
 const SC = {
   fill: '#c7d2fe', stroke: '#4338ca', fill2: '#a5b4fc',
@@ -627,7 +651,7 @@ const Shapes = {
 };
 
 /* ============================================================
-   ۸) ANIMATED SHAPES
+   ۸) ANIMATED SHAPES — LOOP version
    ============================================================ */
 const ShapesAnim = {
   tracingSquare(side) {
@@ -636,7 +660,7 @@ const ShapesAnim = {
     const x = (W - box) / 2, y = (H - box) / 2;
     const len = 4 * box;
     return svgWrap(W, H,
-      `<rect x="${x}" y="${y}" width="${box}" height="${box}" fill="${SC.fill}" fill-opacity="0.4" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
+      `<rect x="${x}" y="${y}" width="${box}" height="${box}" fill="${SC.fill}" fill-opacity="0.35" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw-loop" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
       label(x + box / 2, y + box + 22, fa(side), 'middle', 'svg-label-lg')
     );
   },
@@ -649,7 +673,7 @@ const ShapesAnim = {
     const x = (W - rw) / 2, y = (H - rh) / 2;
     const len = 2 * (rw + rh);
     return svgWrap(W, H,
-      `<rect x="${x}" y="${y}" width="${rw}" height="${rh}" fill="${SC.fill}" fill-opacity="0.4" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
+      `<rect x="${x}" y="${y}" width="${rw}" height="${rh}" fill="${SC.fill}" fill-opacity="0.35" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw-loop" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
       label(x + rw / 2, y + rh + 22, fa(w), 'middle', 'svg-label-lg') +
       label(x - 12, y + rh / 2 + 5, fa(h), 'end', 'svg-label-lg')
     );
@@ -660,10 +684,12 @@ const ShapesAnim = {
     const pts = mathToSvg([v.A, v.B, v.C], W, H, pad);
     const [pA, pB, pC] = pts;
     const cent = polyCentroid(pts);
-    const perim = Math.hypot(pA[0]-pB[0],pA[1]-pB[1]) + Math.hypot(pB[0]-pC[0],pB[1]-pC[1]) + Math.hypot(pC[0]-pA[0],pC[1]-pA[1]);
+    const perim = Math.hypot(pA[0]-pB[0], pA[1]-pB[1]) +
+                  Math.hypot(pB[0]-pC[0], pB[1]-pC[1]) +
+                  Math.hypot(pC[0]-pA[0], pC[1]-pA[1]);
     const len = Math.ceil(perim * 2);
     return svgWrap(W, H,
-      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.4" stroke="${SC.stroke}" stroke-width="4" stroke-linejoin="round" class="anim-draw" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.35" stroke="${SC.stroke}" stroke-width="4" stroke-linejoin="round" class="anim-draw-loop" style="--len: ${len}; stroke-dasharray: ${len}"/>` +
       labelOnSegment(pA, pB, cent, fa(c), 16) +
       labelOnSegment(pB, pC, cent, fa(a), 16) +
       labelOnSegment(pC, pA, cent, fa(b), 16)
@@ -673,8 +699,8 @@ const ShapesAnim = {
     const W = 220, H = 200;
     const cx = W / 2, cy = H / 2 - 4, R = 62;
     return svgWrap(W, H,
-      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${SC.fill}" fill-opacity="0.5" stroke="${SC.stroke}" stroke-width="3" class="anim-fade"/>` +
-      `<line x1="${cx}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw" style="--len: ${R}; stroke-dasharray: ${R}; animation-delay: 0.5s"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${SC.fill}" fill-opacity="0.4" stroke="${SC.stroke}" stroke-width="3" class="anim-fade-loop"/>` +
+      `<line x1="${cx}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len: ${R}; stroke-dasharray: ${R}; animation-delay: 0.3s"/>` +
       `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${SC.stroke}"/>` +
       label(cx + R / 2, cy - 8, fa(r), 'middle', 'svg-label-lg')
     );
@@ -687,10 +713,12 @@ const ShapesAnim = {
     const rw = wNum * s, rh = hNum * s;
     const x = (W - rw) / 2, y = (H - rh) / 2;
     let grid = '';
+    const total = wNum * hNum;
     for (let j = 0; j < hNum; j++) {
       for (let i = 0; i < wNum; i++) {
-        const delay = (j * wNum + i) * 0.08;
-        grid += `<rect x="${(x + i*s).toFixed(1)}" y="${(y + j*s).toFixed(1)}" width="${s.toFixed(1)}" height="${s.toFixed(1)}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="1" class="anim-pop" style="animation-delay: ${delay}s"/>`;
+        const idx = j * wNum + i;
+        const delay = (idx * 0.05).toFixed(2);
+        grid += `<rect x="${(x + i*s).toFixed(1)}" y="${(y + j*s).toFixed(1)}" width="${s.toFixed(1)}" height="${s.toFixed(1)}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="1" class="anim-pop-loop" style="animation-delay: ${delay}s"/>`;
       }
     }
     return svgWrap(W, H,
@@ -709,11 +737,12 @@ const ShapesAnim = {
     const pts = mathToSvg([A, B, C], W, H, pad);
     const [pA, pB, pC] = pts;
     const midBC = [(pB[0] + pC[0]) / 2, (pB[1] + pC[1]) / 2];
+    const hLen = Math.abs(pA[1] - midBC[1]);
     return svgWrap(W, H,
       `<polygon points="${pB.join(',')} ${pC.join(',')} ${pA[0]},${pC[1]} ${pA[0]},${pB[1]}" fill="none" stroke="${SC.stroke}" stroke-width="1.5" stroke-dasharray="4 4" opacity="0.4"/>` +
-      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="3" stroke-linejoin="round" class="anim-fade"/>` +
-      `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" class="anim-draw" style="--len: ${Math.abs(pA[1]-midBC[1])}; stroke-dasharray: ${Math.abs(pA[1]-midBC[1])}; animation-delay: 0.4s"/>` +
-      `<rect x="${midBC[0] - 5}" y="${midBC[1] - 10}" width="10" height="10" fill="none" stroke="${SC.accent}" stroke-width="1.5" class="anim-fade"/>` +
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="3" stroke-linejoin="round" class="anim-fade-loop"/>` +
+      `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" class="anim-draw-loop" style="--len: ${hLen}; stroke-dasharray: ${hLen}; animation-delay: 0.5s"/>` +
+      `<rect x="${midBC[0] - 5}" y="${midBC[1] - 10}" width="10" height="10" fill="none" stroke="${SC.accent}" stroke-width="1.5" class="anim-fade-loop" style="animation-delay: 0.5s"/>` +
       label(pA[0] + 12, (pA[1] + midBC[1]) / 2 + 4, fa(height), 'start', 'svg-label-lg') +
       label(midBC[0], midBC[1] + 22, fa(base), 'middle', 'svg-label-lg')
     );
@@ -726,9 +755,9 @@ const ShapesAnim = {
     const topPts = `${x0 - offset},${y0 - offset} ${x0},${y0} ${x0 + size},${y0} ${x0 + size - offset},${y0 - offset}`;
     const rightPts = `${x0 + size - offset},${y0 - offset} ${x0 + size},${y0} ${x0 + size},${y0 + size} ${x0 + size - offset},${y0 + size - offset}`;
     return svgWrap(W, H,
-      `<polygon points="${rightPts}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide" style="animation-delay: 0s"/>` +
-      `<polygon points="${topPts}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide" style="animation-delay: 0.5s"/>` +
-      `<polygon points="${frontPts}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide" style="animation-delay: 1s"/>` +
+      `<polygon points="${rightPts}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide-loop" style="animation-delay: 0s"/>` +
+      `<polygon points="${topPts}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide-loop" style="animation-delay: 0.3s"/>` +
+      `<polygon points="${frontPts}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide-loop" style="animation-delay: 0.6s"/>` +
       label(x0 + size / 2 - offset / 2, y0 + size - offset + 22, fa(edge), 'middle', 'svg-label-lg')
     );
   },
@@ -742,9 +771,9 @@ const ShapesAnim = {
     const offset = 25;
     const x0 = pad + offset, y0 = pad + offset;
     return svgWrap(W, H,
-      `<polygon points="${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 + A - offset},${y0 + B - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide" style="animation-delay: 0s"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset},${y0 - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide" style="animation-delay: 0.5s"/>` +
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" rx="3" class="anim-slide" style="animation-delay: 1s"/>` +
+      `<polygon points="${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 + A - offset},${y0 + B - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide-loop" style="animation-delay: 0s"/>` +
+      `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset},${y0 - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-slide-loop" style="animation-delay: 0.3s"/>` +
+      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" rx="3" class="anim-slide-loop" style="animation-delay: 0.6s"/>` +
       label(x0 - offset + A / 2, y0 - offset + B + 22, fa(length), 'middle', 'svg-label-lg') +
       label(x0 - offset - 12, y0 - offset + B / 2 + 4, fa(height), 'end', 'svg-label-lg') +
       label(x0 + A - offset + C / 2 + 8, y0 - offset - C * 0.3 - 4, fa(width), 'start', 'svg-label-lg')
@@ -760,11 +789,11 @@ const ShapesAnim = {
       const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
       const large = (a2 - a1) > Math.PI ? 1 : 0;
       const fill = i < n ? '#a5b4fc' : '#e5e7eb';
-      const delay = i * 0.22;
+      const delay = (i * 0.15).toFixed(2);
       if (d === 1) {
-        paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#4338ca" stroke-width="2" class="anim-pop" style="animation-delay: ${delay}s"/>`;
+        paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="#4338ca" stroke-width="2" class="anim-pop-loop" style="animation-delay: ${delay}s"/>`;
       } else {
-        paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${fill}" stroke="#4338ca" stroke-width="1.5" class="anim-pop" style="animation-delay: ${delay}s"/>`;
+        paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${fill}" stroke="#4338ca" stroke-width="1.5" class="anim-pop-loop" style="animation-delay: ${delay}s"/>`;
       }
     }
     return svgWrap(W, H, paths);
@@ -778,8 +807,8 @@ const ShapesAnim = {
     let rects = '';
     for (let i = 0; i < d; i++) {
       const fill = i < n ? '#a5b4fc' : '#e5e7eb';
-      const delay = i * 0.18;
-      rects += `<rect x="${(pad + i * segW).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="${h}" fill="${fill}" stroke="#4338ca" stroke-width="1.5" class="anim-pop" style="animation-delay: ${delay}s"/>`;
+      const delay = (i * 0.12).toFixed(2);
+      rects += `<rect x="${(pad + i * segW).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="${h}" fill="${fill}" stroke="#4338ca" stroke-width="1.5" class="anim-pop-loop" style="animation-delay: ${delay}s"/>`;
     }
     const fracText = `<text x="${W/2}" y="${y + h + 25}" text-anchor="middle" class="svg-label-lg" direction="rtl">${fracHTML({ n, d })}</text>`;
     return svgWrap(W, H, rects + fracText);
@@ -795,8 +824,8 @@ const ShapesAnim = {
       line += `<text x="${x}" y="${y + 24}" text-anchor="middle" class="svg-label" direction="rtl">${fa(i)}</text>`;
     }
     const markerX = pad + (value - from) * step;
-    line += `<circle cx="${markerX}" cy="${y}" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2" class="anim-pop" style="animation-delay: 0.9s"/>`;
-    line += `<line x1="${markerX}" y1="${y - 20}" x2="${markerX}" y2="${y - 7}" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" class="anim-draw" style="--len: 13; stroke-dasharray: 13; animation-delay: 0.5s"/>`;
+    line += `<circle cx="${markerX}" cy="${y}" r="7" fill="#fbbf24" stroke="#fff" stroke-width="2" class="anim-pop-loop" style="animation-delay: 0.5s"/>`;
+    line += `<line x1="${markerX}" y1="${y - 20}" x2="${markerX}" y2="${y - 7}" stroke="#fbbf24" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len: 13; stroke-dasharray: 13; animation-delay: 0.3s"/>`;
     return svgWrap(W, H, line);
   }
 };
@@ -2144,7 +2173,7 @@ function viewTopic(topic) {
 }
 
 /* ============================================================
-   ۲۲) LESSONS
+   ۲۲) LESSONS — همان LESSONS نسخه ۸.۰
    ============================================================ */
 const LESSONS = {
   perimeter: [
@@ -2171,7 +2200,7 @@ const LESSONS = {
         },
         {
           text: 'یک سفره‌ی مربعی داریم که هر ضلعش ۵ سانتی‌متر است. برای دوخت نوار دور آن چقدر نوار لازم است؟',
-          shape: Shapes.square(5),
+          shape: ShapesAnim.tracingSquare(5),
           steps: ['ضلع سفره = ۵ سانتی‌متر', 'محیط = ۴ × ۵', '۴ × ۵ = ۲۰'],
           answer: 'پس ۲۰ سانتی‌متر نوار لازم است.'
         },
@@ -2213,7 +2242,7 @@ const LESSONS = {
         },
         {
           text: 'یک زمین فوتبال به طول ۱۲ متر و عرض ۷ متر. یک دور کامل دور زمین چند متر است؟',
-          shape: Shapes.rectangle(12, 7),
+          shape: ShapesAnim.tracingRect(12, 7),
           steps: ['طول + عرض = ۱۲ + ۷ = ۱۹', 'محیط = ۲ × ۱۹ = ۳۸'],
           answer: 'یک دور کامل = ۳۸ متر'
         }
@@ -2243,7 +2272,7 @@ const LESSONS = {
         },
         {
           text: 'زمینی مثلثی داریم با اضلاع ۶، ۷ و ۸ متر. برای نرده‌کشی دور آن چقدر نرده لازم است؟',
-          shape: Shapes.triangle(6, 7, 8),
+          shape: ShapesAnim.tracingTriangle(6, 7, 8),
           steps: ['۶ + ۷ = ۱۳', '۱۳ + ۸ = ۲۱'],
           answer: '۲۱ متر نرده لازم است.'
         }
@@ -2272,7 +2301,7 @@ const LESSONS = {
         },
         {
           text: 'دایره‌ای به قطر ۶ متر. محیطش چقدر است؟',
-          shape: Shapes.circle(3),
+          shape: ShapesAnim.circleRadiusAnim(3),
           steps: ['قطر = ۶، پس شعاع = ۳', 'محیط = ۲ × ۳٫۱۴ × ۳', '۲ × ۳٫۱۴ × ۳ = ۱۸٫۸۴'],
           answer: 'محیط ≈ ۱۸٫۸۴ متر'
         }
@@ -2313,7 +2342,7 @@ const LESSONS = {
       paragraphs: [
         'مساحت یعنی چقدر «سطح» در داخل شکل جا می‌شود. مثلاً یک اتاق را در نظر بگیر: مساحت یعنی کف اتاق چقدر بزرگ است.',
         'برای شمارش دقیق مساحت، شکل را به مربع‌های کوچک یک‌در‌یک سانتی‌متری تقسیم می‌کنیم. هر مربع کوچک = یک سانتی‌متر مربع.',
-        'برای مساحت مربع، ضلع را در خودش ضرب می‌کنیم. مثلاً اگر ضلع ۴ باشد، مساحت = ۴ × ۴ = ۱۶.'
+        'برای مساحت مربع، ضلع را در خودش ضرب می‌کنیم.'
       ],
       examples: [
         {
@@ -2350,7 +2379,7 @@ const LESSONS = {
       formula: 'مساحت = طول × عرض',
       paragraphs: [
         'برای مساحت مستطیل، طول را در عرض ضرب می‌کنیم. به همین راحتی!',
-        'دقت کن که این ضرب دقیقاً یعنی چقدر مربع کوچک یک‌در‌یک می‌تواند در مستطیل جا شود. مثال پایین را نگاه کن!'
+        'دقت کن که این ضرب دقیقاً یعنی چقدر مربع کوچک یک‌در‌یک می‌تواند در مستطیل جا شود.'
       ],
       examples: [
         {
@@ -2361,13 +2390,13 @@ const LESSONS = {
         },
         {
           text: 'زمین فوتبالی به طول ۱۲ متر و عرض ۶ متر. مساحتش چقدر است؟',
-          shape: Shapes.rectangle(12, 6),
+          shape: ShapesAnim.gridRect(12, 6),
           steps: ['مساحت = ۱۲ × ۶', '۱۲ × ۶ = ۷۲'],
           answer: 'مساحت = ۷۲ متر مربع'
         },
         {
           text: 'یک باغچه به طول ۸ و عرض ۳ متر. برای کاشتن گل، چند متر مربع زمین لازم است؟',
-          shape: Shapes.rectangle(8, 3),
+          shape: ShapesAnim.gridRect(8, 3),
           steps: ['مساحت = ۸ × ۳', '= ۲۴'],
           answer: '۲۴ متر مربع زمین لازم است.'
         }
@@ -2392,7 +2421,7 @@ const LESSONS = {
         },
         {
           text: 'یک بیرق مثلثی داریم با قاعده ۶ و ارتفاع ۴ سانتی‌متر. مساحتش چقدر است؟',
-          shape: Shapes.triangleBH(6, 4),
+          shape: ShapesAnim.triangleAreaAnim(6, 4),
           steps: ['۶ × ۴ = ۲۴', '۲۴ ÷ ۲ = ۱۲'],
           answer: 'مساحت = ۱۲ سانتی‌متر مربع'
         }
@@ -2457,7 +2486,7 @@ const LESSONS = {
       formula: 'مساحت = (قطر۱ × قطر۲) ÷ ۲',
       paragraphs: [
         'لوزی یک چهارضلعی است که همه‌ی ضلع‌هایش مساوی‌اند، ولی زوایایش قائمه نیستند.',
-        'لوزی دو قطر دارد که عمود بر هم هستند. برای مساحت، قطرها را در هم ضرب می‌کنیم و بر ۲ تقسیم می‌کنیم.'
+        'لوزی دو قطر دارد که عمود بر هم هستند.'
       ],
       examples: [
         {
@@ -2540,7 +2569,7 @@ const LESSONS = {
       paragraphs: [
         'حجم یعنی چقدر «فضا» داخل یک شکل سه‌بعدی جا می‌شود. مثلاً یک جعبه چقدر می‌تواند وسایل در خودش جا بدهد.',
         'مکعب شکلی است که همه‌ی ضلع‌هایش مساوی‌اند و همه‌ی زوایایش قائمه. مثل تاسِ بازی!',
-        'برای حجم مکعب، ضلع را سه بار در خودش ضرب می‌کنیم: ضلع × ضلع × ضلع.'
+        'برای حجم مکعب، ضلع را سه بار در خودش ضرب می‌کنیم.'
       ],
       examples: [
         {
@@ -2557,7 +2586,7 @@ const LESSONS = {
         },
         {
           text: 'یک جعبه‌ی مکعبی داریم که هر ضلعش ۴ سانتی‌متر. حجمش چقدر است؟',
-          shape: Shapes.cube(4),
+          shape: ShapesAnim.cubeBuild(4),
           steps: ['حجم = ۴ × ۴ × ۴', '۴ × ۴ = ۱۶ و ۱۶ × ۴ = ۶۴'],
           answer: 'حجم = ۶۴ سانتی‌متر مکعب'
         }
@@ -2581,7 +2610,7 @@ const LESSONS = {
         },
         {
           text: 'یک یخچال داریم به طول ۴، عرض ۳ و ارتفاع ۵ سانتی‌متر. حجم داخلی‌اش چقدر است؟',
-          shape: Shapes.box(4, 3, 5),
+          shape: ShapesAnim.boxBuild(4, 3, 5),
           steps: ['۴ × ۳ = ۱۲', '۱۲ × ۵ = ۶۰'],
           answer: 'حجم = ۶۰ سانتی‌متر مکعب'
         }
@@ -2665,7 +2694,7 @@ const LESSONS = {
       id: 'simplify', title: 'ساده کردن کسر', emoji: '✂️',
       formula: 'تقسیم صورت و مخرج بر ب.م.م',
       paragraphs: [
-        'گاهی کسرها عددهای بزرگی دارند که می‌شود کوچک‌ترشان کرد بدون اینکه مقدارشان عوض شود. به این کار می‌گویند «ساده کردن کسر».',
+        'گاهی کسرها عددهای بزرگی دارند که می‌شود کوچک‌ترشان کرد بدون اینکه مقدارشان عوض شود.',
         'برای ساده کردن، باید بفهمیم بزرگ‌ترین عددی که هم صورت و هم مخرج بر آن بخش‌پذیرند چیست (ب.م.م).',
         'بعد هم صورت و هم مخرج را بر آن ب.م.م تقسیم می‌کنیم.'
       ],
@@ -2673,41 +2702,25 @@ const LESSONS = {
         {
           text: 'کسر دو‌چهارم را ساده کن.',
           html: fracHTML({ n: 2, d: 4 }),
-          steps: [
-            'بزرگ‌ترین عددی که هم ۲ و هم ۴ بر آن بخش‌پذیرند: ۲',
-            'صورت: ۲ ÷ ۲ = ۱',
-            'مخرج: ۴ ÷ ۲ = ۲',
-            'نتیجه: یک‌دوم'
-          ],
+          steps: ['بزرگ‌ترین عددی که هم ۲ و هم ۴ بر آن بخش‌پذیرند: ۲', 'صورت: ۲ ÷ ۲ = ۱', 'مخرج: ۴ ÷ ۲ = ۲', 'نتیجه: یک‌دوم'],
           answer: `پس ${fracHTML({ n: 2, d: 4 })} = ${fracHTML({ n: 1, d: 2 })}`
         },
         {
           text: 'کسر شش‌نهم را ساده کن.',
           html: fracHTML({ n: 6, d: 9 }),
-          steps: [
-            'بزرگ‌ترین مقسوم‌علیه مشترک ۶ و ۹: عدد ۳',
-            'صورت: ۶ ÷ ۳ = ۲',
-            'مخرج: ۹ ÷ ۳ = ۳',
-            'نتیجه: دو‌سوم'
-          ],
+          steps: ['بزرگ‌ترین مقسوم‌علیه مشترک ۶ و ۹: عدد ۳', 'صورت: ۶ ÷ ۳ = ۲', 'مخرج: ۹ ÷ ۳ = ۳', 'نتیجه: دو‌سوم'],
           answer: `پس ${fracHTML({ n: 6, d: 9 })} = ${fracHTML({ n: 2, d: 3 })}`
         },
         {
           text: 'کسر هشت‌دوازدهم را ساده کن.',
           html: fracHTML({ n: 8, d: 12 }),
-          steps: [
-            'بزرگ‌ترین مشترک ۸ و ۱۲: عدد ۴',
-            '۸ ÷ ۴ = ۲ و ۱۲ ÷ ۴ = ۳'
-          ],
+          steps: ['بزرگ‌ترین مشترک ۸ و ۱۲: عدد ۴', '۸ ÷ ۴ = ۲ و ۱۲ ÷ ۴ = ۳'],
           answer: `پس ${fracHTML({ n: 8, d: 12 })} = ${fracHTML({ n: 2, d: 3 })}`
         },
         {
           text: 'کسر ده‌پانزدهم را ساده کن.',
           html: fracHTML({ n: 10, d: 15 }),
-          steps: [
-            'مقسوم‌علیه مشترک ۱۰ و ۱۵: عدد ۵',
-            '۱۰ ÷ ۵ = ۲ و ۱۵ ÷ ۵ = ۳'
-          ],
+          steps: ['مقسوم‌علیه مشترک ۱۰ و ۱۵: عدد ۵', '۱۰ ÷ ۵ = ۲ و ۱۵ ÷ ۵ = ۳'],
           answer: `پس ${fracHTML({ n: 10, d: 15 })} = ${fracHTML({ n: 2, d: 3 })}`
         }
       ],
@@ -2715,9 +2728,7 @@ const LESSONS = {
         'اگر عدد بزرگ را بلد نبودی، با عددهای کوچک شروع کن.',
         'اگر صورت و مخرج ب.م.م نداشتند (به‌جز ۱)، کسر از قبل ساده بوده.'
       ],
-      pitfalls: [
-        'اشتباه نکن! فقط صورت یا فقط مخرج را تقسیم نکن. باید هر دو را تقسیم کنی.'
-      ]
+      pitfalls: ['اشتباه نکن! فقط صورت یا فقط مخرج را تقسیم نکن. باید هر دو را تقسیم کنی.']
     },
     {
       id: 'compare', title: 'مقایسه کسرها', emoji: '⚖️',
@@ -2730,23 +2741,13 @@ const LESSONS = {
         {
           text: 'کدام بزرگ‌تر است: یک‌دوم یا یک‌سوم؟',
           html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} ? ${fracHTML({ n: 1, d: 3 })}</span>`,
-          steps: [
-            'مخرج مشترک: ۶',
-            'یک‌دوم = سه‌ششم',
-            'یک‌سوم = دو‌ششم',
-            'مقایسه صورت‌ها: ۳ > ۲'
-          ],
+          steps: ['مخرج مشترک: ۶', 'یک‌دوم = سه‌ششم', 'یک‌سوم = دو‌ششم', 'مقایسه صورت‌ها: ۳ > ۲'],
           answer: 'پس یک‌دوم بزرگ‌تر است.'
         },
         {
           text: 'کدام بزرگ‌تر است: دو‌سوم یا سه‌چهارم؟',
           html: `<span dir="ltr">${fracHTML({ n: 2, d: 3 })} ? ${fracHTML({ n: 3, d: 4 })}</span>`,
-          steps: [
-            'مخرج مشترک: ۱۲',
-            'دو‌سوم = هشت‌دوازدهم',
-            'سه‌چهارم = نه‌دوازدهم',
-            '۸ < ۹ پس سه‌چهارم بزرگ‌تر است.'
-          ],
+          steps: ['مخرج مشترک: ۱۲', 'دو‌سوم = هشت‌دوازدهم', 'سه‌چهارم = نه‌دوازدهم', '۸ < ۹ پس سه‌چهارم بزرگ‌تر است.'],
           answer: 'پس سه‌چهارم بزرگ‌تر است.'
         }
       ],
@@ -2757,18 +2758,14 @@ const LESSONS = {
       id: 'add', title: 'جمع کسرها', emoji: '➕',
       formula: 'مخرج مشترک بگیر، بعد جمع کن',
       paragraphs: [
-        'برای جمع دو کسر، اول باید مخرج‌هایشان را با هم مساوی کنیم. چرا؟ چون نمی‌شود چیزهای با واحد مختلف را با هم جمع کرد.',
-        'بعد از مشترک کردن مخرج‌ها، صورت‌ها را با هم جمع می‌کنیم و مخرج را همان می‌نویسیم.'
+        'برای جمع دو کسر، اول باید مخرج‌هایشان را با هم مساوی کنیم.',
+        'بعد از مشترک کردن مخرج‌ها، صورت‌ها را با هم جمع می‌کنیم.'
       ],
       examples: [
         {
           text: 'حاصل جمع یک‌پنجم و دو‌پنجم چقدر است؟',
           html: `<span dir="ltr">${fracHTML({ n: 1, d: 5 })} + ${fracHTML({ n: 2, d: 5 })}</span>`,
-          steps: [
-            'مخرج‌ها هر دو ۵ هستند (مساوی).',
-            'فقط صورت‌ها را جمع می‌کنیم: ۱ + ۲ = ۳',
-            'نتیجه: سه‌پنجم'
-          ],
+          steps: ['مخرج‌ها هر دو ۵ هستند (مساوی).', 'فقط صورت‌ها را جمع می‌کنیم: ۱ + ۲ = ۳', 'نتیجه: سه‌پنجم'],
           answer: `= ${fracHTML({ n: 3, d: 5 })}`
         },
         {
@@ -2798,22 +2795,13 @@ const LESSONS = {
         {
           text: 'حاصل تفریق سه‌پنجم منهای یک‌پنجم چقدر است؟',
           html: `<span dir="ltr">${fracHTML({ n: 3, d: 5 })} − ${fracHTML({ n: 1, d: 5 })}</span>`,
-          steps: [
-            'مخرج‌ها مساوی (۵).',
-            'صورت‌ها را کم می‌کنیم: ۳ − ۱ = ۲',
-            'نتیجه: دو‌پنجم'
-          ],
+          steps: ['مخرج‌ها مساوی (۵).', 'صورت‌ها را کم می‌کنیم: ۳ − ۱ = ۲', 'نتیجه: دو‌پنجم'],
           answer: `= ${fracHTML({ n: 2, d: 5 })}`
         },
         {
           text: 'حاصل تفریق سه‌چهارم منهای یک‌دوم چقدر است؟',
           html: `<span dir="ltr">${fracHTML({ n: 3, d: 4 })} − ${fracHTML({ n: 1, d: 2 })}</span>`,
-          steps: [
-            'مخرج‌ها فرق دارند: ۴ و ۲',
-            'مخرج مشترک: ۴',
-            'یک‌دوم = دو‌چهارم',
-            'سه‌چهارم − دو‌چهارم = یک‌چهارم'
-          ],
+          steps: ['مخرج‌ها فرق دارند: ۴ و ۲', 'مخرج مشترک: ۴', 'یک‌دوم = دو‌چهارم', 'سه‌چهارم − دو‌چهارم = یک‌چهارم'],
           answer: `= ${fracHTML({ n: 1, d: 4 })}`
         }
       ],
@@ -2831,11 +2819,7 @@ const LESSONS = {
         {
           text: 'حاصل ضرب یک‌دوم و دو‌سوم چقدر است؟',
           html: `<span dir="ltr">${fracHTML({ n: 1, d: 2 })} × ${fracHTML({ n: 2, d: 3 })}</span>`,
-          steps: [
-            'صورت‌ها: ۱ × ۲ = ۲',
-            'مخرج‌ها: ۲ × ۳ = ۶',
-            'نتیجه: دو‌ششم که ساده می‌شود به یک‌سوم'
-          ],
+          steps: ['صورت‌ها: ۱ × ۲ = ۲', 'مخرج‌ها: ۲ × ۳ = ۶', 'نتیجه: دو‌ششم که ساده می‌شود به یک‌سوم'],
           answer: `= ${fracHTML({ n: 1, d: 3 })}`
         }
       ],
@@ -2940,7 +2924,7 @@ const LESSONS = {
       id: 'add', title: 'جمع اعشار', emoji: '➕',
       formula: 'ممیزها زیر هم',
       paragraphs: [
-        'برای جمع اعشاری، اعداد را طوری زیر هم می‌نویسیم که ممیزها روبروی هم باشند. بعد مثل اعداد عادی جمع می‌کنیم.'
+        'برای جمع اعشاری، اعداد را طوری زیر هم می‌نویسیم که ممیزها روبروی هم باشند.'
       ],
       examples: [
         {
@@ -2957,7 +2941,7 @@ const LESSONS = {
       id: 'sub', title: 'تفریق اعشار', emoji: '➖',
       formula: 'ممیزها زیر هم',
       paragraphs: [
-        'تفریق اعشار هم مثل جمع است: ممیزها را زیر هم می‌گذاریم و مثل اعداد عادی تفریق می‌کنیم.'
+        'تفریق اعشار هم مثل جمع است: ممیزها را زیر هم می‌گذاریم.'
       ],
       examples: [
         {
@@ -3003,11 +2987,7 @@ const LESSONS = {
         {
           text: '۰٫۷۵ را به کسر تبدیل کن.',
           html: eq('۰٫۷۵'),
-          steps: [
-            '۲ رقم بعد از ممیز → مخرج ۱۰۰',
-            'صورت = ۷۵',
-            'کسر: هفتادوپنج‌صدم که ساده می‌شود به سه‌چهارم'
-          ],
+          steps: ['۲ رقم بعد از ممیز → مخرج ۱۰۰', 'صورت = ۷۵', 'کسر: هفتادوپنج‌صدم که ساده می‌شود به سه‌چهارم'],
           answer: `= ${fracHTML({ n: 3, d: 4 })}`
         }
       ],
@@ -3290,12 +3270,12 @@ function viewExamSetup(topic) {
   </div>
   <div class="card" style="background:#dbeafe;border-right:4px solid var(--info)">
     <p style="margin:0;font-size:.9rem">
-      📝 <strong>نکته:</strong> در این آزمون پاسخ‌ها همان لحظه بررسی نمی‌شوند. بعد از پایان، همه‌ی پاسخ‌های درست و نادرست را می‌بینی.
+      📝 <strong>نکته:</strong> در این آزمون پاسخ‌ها همان لحظه بررسی نمی‌شوند.
     </p>
   </div>
   <div class="card" style="background:#fef3c7;border-right:4px solid var(--accent)">
     <p style="margin:0;font-size:.9rem">
-      ⚠️ <strong>نمره منفی:</strong> برای هر ۳ پاسخ غلط، ۱ نمره کم می‌شود. سوالات بدون پاسخ حساب نمی‌شوند.
+      ⚠️ <strong>نمره منفی:</strong> برای هر ۳ پاسخ غلط، ۱ نمره کم می‌شود. سوالات بی‌پاسخ حساب نمی‌شوند.
     </p>
   </div>
   <button class="btn full" style="margin-top:16px" onclick="window.__startExam('${topic}')">🚀 شروع آزمون</button>
@@ -3419,7 +3399,7 @@ function startMultiExam() {
 }
 
 /* ============================================================
-   ۲۶) EXAM VIEW — بدون نمایش درست/غلط
+   ۲۶) EXAM VIEW
    ============================================================ */
 function startExamTimer() {
   if (examTimer) clearInterval(examTimer);
