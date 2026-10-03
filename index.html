@@ -62,23 +62,44 @@
       clearTimeout(t._timer);
       t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
     }
+
+    // ---------- دکمه نصب PWA (فقط در صفحه خانه) ----------
     let deferredPrompt = null;
     const installBtn = document.getElementById('installBtn');
+
+    window.__updateInstallBtn = function () {
+      if (!installBtn) return;
+      const isHome = window.__currentRoute === 'home';
+      if (isHome && deferredPrompt) {
+        installBtn.style.display = 'block';
+      } else {
+        installBtn.style.display = 'none';
+      }
+    };
+
     window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault(); deferredPrompt = e;
-      if (installBtn) installBtn.style.display = 'block';
+      e.preventDefault();
+      deferredPrompt = e;
+      // فقط اگر در صفحه خانه بودیم، دکمه را نمایش بده
+      window.__updateInstallBtn();
     });
-    if (installBtn) installBtn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      installBtn.style.display = 'none';
-      deferredPrompt.prompt();
-      try { await deferredPrompt.userChoice; } catch (e) {}
-      deferredPrompt = null;
-    });
+
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        installBtn.style.display = 'none';
+        deferredPrompt.prompt();
+        try { await deferredPrompt.userChoice; } catch (e) {}
+        deferredPrompt = null;
+      });
+    }
+
     window.addEventListener('appinstalled', () => {
       if (installBtn) installBtn.style.display = 'none';
-      showToast('🎉 نصب شد!');
+      deferredPrompt = null;
+      showToast('🎉 ریاضی‌یار نصب شد!');
     });
+
     window.addEventListener('offline', () => showToast('📴 حالت آفلاین'));
   })();
   </script>
