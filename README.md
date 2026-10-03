@@ -109,9 +109,4 @@ MIT
 ## 👨‍💻 سازنده
 
 **maysam261**
-- ✈️ [t.me/MaySam261](https://t.me/MaySam261)
-- 💚 [ble.ir/maysam261](https://ble.ir/maysam261)
-- 📘 [eitaa.com/maysam261](https://eitaa.com/maysam261)
-
 پروژه با ❤️ برای دانش‌آموزان ایرانی.
-```
