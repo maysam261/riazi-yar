@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'riazi-yar-v15';
+const CACHE_VERSION = 'riazi-yar-v16';
 const APP_SHELL = [
   './',
   './index.html',
