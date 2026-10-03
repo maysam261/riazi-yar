@@ -1,107 +1,86 @@
 <!DOCTYPE html>
 <html lang="fa" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>ریاضی‌یار | بازی آموزشی ریاضی</title>
-  <meta name="description" content="بازی آموزشی محیط، مساحت، حجم، کسر و اعشار">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ریاضی‌یار | بازی آموزشی ریاضی</title>
+<meta name="description" content="بازی آموزشی محیط، مساحت، حجم، کسر و اعشار">
+<meta name="color-scheme" content="light dark">
 
-  <link rel="manifest" href="manifest.json">
-  <meta name="theme-color" content="#7c3aed">
-  <meta name="color-scheme" content="light">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="ریاضی‌یار">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
-  <link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#7c3aed" id="themeColorMeta">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ریاضی‌یار">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.svg">
+<link rel="icon" type="image/svg+xml" href="icons/icon-192.svg">
 
-  <link rel="stylesheet" href="style.css">
+<script>
+(function () {
+  try {
+    var saved = JSON.parse(localStorage.getItem('riazi-yar-v1') || '{}');
+    var theme = (saved.settings && saved.settings.theme) || 'auto';
+    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var isDark = theme === 'dark' || (theme === 'auto' && prefersDark);
+    if (isDark) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (m) m.setAttribute('content', '#0f0f1a');
+    }
+  } catch (e) {}
+})();
+</script>
+
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app" role="main"></div>
+<div id="app" role="main"></div>
+<button id="installBtn" aria-label="نصب اپلیکیشن" style="display:none;position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:500;background:linear-gradient(135deg,#7c3aed,#06b6d4);color:#fff;padding:12px 24px;border-radius:999px;font-family:Vazirmatn,Tahoma,sans-serif;font-weight:700;font-size:1rem;border:none;cursor:pointer;box-shadow:0 8px 24px rgba(124,58,237,.4)">📲 نصب ریاضی‌یار</button>
+<div id="offlineToast" role="status" aria-live="polite" style="display:none;position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:600;background:#10b981;color:#fff;padding:10px 20px;border-radius:999px;font-family:Vazirmatn,Tahoma,sans-serif;font-size:.9rem;box-shadow:0 6px 18px rgba(16,185,129,.4)"></div>
 
-  <button id="installBtn" aria-label="نصب اپلیکیشن" style="
-    display: none; position: fixed; bottom: 100px; left: 50%;
-    transform: translateX(-50%); z-index: 500;
-    background: linear-gradient(135deg, #7c3aed, #06b6d4);
-    color: #fff; padding: 12px 24px; border-radius: 999px;
-    font-family: Vazirmatn, Tahoma, sans-serif; font-weight: 700;
-    font-size: 1rem; border: none; cursor: pointer;
-    box-shadow: 0 8px 24px rgba(124,58,237,.4);
-  ">📲 نصب ریاضی‌یار</button>
-
-  <div id="offlineToast" role="status" aria-live="polite" style="
-    display: none; position: fixed; top: 20px; left: 50%;
-    transform: translateX(-50%); z-index: 600;
-    background: #10b981; color: #fff;
-    padding: 10px 20px; border-radius: 999px;
-    font-family: Vazirmatn, Tahoma, sans-serif; font-size: .9rem;
-    box-shadow: 0 6px 18px rgba(16,185,129,.4);
-  "></div>
-
-  <script src="script.js"></script>
-
-  <script>
-  (function () {
-    'use strict';
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('sw.js', { scope: './' })
-          .then(() => {
-            if (navigator.serviceWorker.controller) showToast('✅ آماده‌ی استفاده‌ی آفلاین');
-          })
-          .catch(err => console.warn('SW:', err));
-        navigator.serviceWorker.addEventListener('controllerchange', () => showToast('✅ بروزرسانی شد'));
-      });
-    }
-    function showToast(msg) {
-      const t = document.getElementById('offlineToast');
-      if (!t) return;
-      t.textContent = msg;
-      t.style.display = 'block';
-      clearTimeout(t._timer);
-      t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
-    }
-
-    // ---------- دکمه نصب PWA (فقط در صفحه خانه) ----------
-    let deferredPrompt = null;
-    const installBtn = document.getElementById('installBtn');
-
-    window.__updateInstallBtn = function () {
-      if (!installBtn) return;
-      const isHome = window.__currentRoute === 'home';
-      if (isHome && deferredPrompt) {
-        installBtn.style.display = 'block';
-      } else {
-        installBtn.style.display = 'none';
-      }
-    };
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      // فقط اگر در صفحه خانه بودیم، دکمه را نمایش بده
-      window.__updateInstallBtn();
+<script src="script.js"></script>
+<script>
+(function () {
+  'use strict';
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { scope: './' })
+        .then(() => { if (navigator.serviceWorker.controller) showToast('✅ آماده‌ی استفاده‌ی آفلاین'); })
+        .catch(err => console.warn('SW:', err));
+      navigator.serviceWorker.addEventListener('controllerchange', () => showToast('✅ بروزرسانی شد'));
     });
-
-    if (installBtn) {
-      installBtn.addEventListener('click', async () => {
-        if (!deferredPrompt) return;
-        installBtn.style.display = 'none';
-        deferredPrompt.prompt();
-        try { await deferredPrompt.userChoice; } catch (e) {}
-        deferredPrompt = null;
-      });
-    }
-
-    window.addEventListener('appinstalled', () => {
-      if (installBtn) installBtn.style.display = 'none';
-      deferredPrompt = null;
-      showToast('🎉 ریاضی‌یار نصب شد!');
-    });
-
-    window.addEventListener('offline', () => showToast('📴 حالت آفلاین'));
-  })();
-  </script>
+  }
+  function showToast(msg) {
+    const t = document.getElementById('offlineToast');
+    if (!t) return;
+    t.textContent = msg; t.style.display = 'block';
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
+  }
+  let deferredPrompt = null;
+  const installBtn = document.getElementById('installBtn');
+  window.__updateInstallBtn = function () {
+    if (!installBtn) return;
+    const isHome = window.__currentRoute === 'home';
+    installBtn.style.display = (isHome && deferredPrompt) ? 'block' : 'none';
+  };
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredPrompt = e; window.__updateInstallBtn();
+  });
+  if (installBtn) installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    installBtn.style.display = 'none';
+    deferredPrompt.prompt();
+    try { await deferredPrompt.userChoice; } catch (e) {}
+    deferredPrompt = null;
+  });
+  window.addEventListener('appinstalled', () => {
+    if (installBtn) installBtn.style.display = 'none';
+    deferredPrompt = null;
+    showToast('🎉 ریاضی‌یار نصب شد!');
+  });
+  window.addEventListener('offline', () => showToast('📴 حالت آفلاین'));
+})();
+</script>
 </body>
 </html>
