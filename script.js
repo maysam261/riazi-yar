@@ -1,20 +1,22 @@
 /* =============================================================
-   ریاضی‌یار — نسخه ۱۴.۰
-   - ۷ ترکیب پیچیده با ۴ تا ۶ شکل هندسی
-   - انیمیشن محیط gradual برای همه‌ی شکل‌ها
-   - انیمیشن مساحت بدون خط دور
-   - حجم ۳بعدی با ساخت مرحله‌ای ۶ وجه
-   - نوارهای اعشار با عدد در بالا
-   - محور اعشار با فلش متوالی از مبدأ
-   - حذف حروف انگلیسی و کلمات اضافی
-   - رفع باگ نمایش دوگانه در درسنامه
+   ریاضی‌یار — نسخه ۱۵.۰
+   - نمایش نسخه در تنظیمات
+   - روابط ریاضی چپ به راست
+   - کسرها همه با fracHTML (بدون اسلش)
+   - آموزش کامل ب.م.م
+   - انیمیشن محیط برگشت
+   - انیمیشن حجم با مکعب‌های ۱×۱
+   - مساحت مثلث: ارتفاع → قاعده → زاویه
+   - ابعاد ≤۱۰ سطح، ≤۶ حجم
+   - ترکیب‌ها با ابعاد کنار اضلاع
+   - اعشار روی محور با قوس
    ============================================================= */
 (function () {
 'use strict';
 
 /* ═════════ ۱) STATE ═════════ */
 const STORAGE_KEY = 'riazi-yar-v1';
-const APP_VERSION = '14.0';
+const APP_VERSION = '15.0';
 
 const defaultState = {
   settings: {
@@ -42,13 +44,9 @@ function loadState() {
     if (typeof merged.settings.debug !== 'boolean') merged.settings.debug = false;
     if (!merged.dailyChallenge) merged.dailyChallenge = { lastDate: null, lastCorrect: null };
     return merged;
-  } catch (e) {
-    return deepClone(defaultState);
-  }
+  } catch (e) { return deepClone(defaultState); }
 }
-function saveState() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {}
-}
+function saveState() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (_) {} }
 function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
 function mergeDeep(t, s) {
   for (const k in s) {
@@ -64,10 +62,7 @@ function activeStudent() {
 function newStudentTemplate(name, family, grade) {
   return {
     id: 'stu_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-    name: name || 'دانش‌آموز',
-    family: family || '',
-    grade: grade || 6,
-    createdAt: Date.now(),
+    name: name || 'دانش‌آموز', family: family || '', grade: grade || 6, createdAt: Date.now(),
     stats: { coins: 0, stars: 0, xp: 0, level: 1, streak: 0, bestStreak: 0, totalQuestions: 0, totalCorrect: 0, badges: [] },
     progress: {
       perimeter: { attempts: 0, correct: 0 }, area: { attempts: 0, correct: 0 },
@@ -111,10 +106,7 @@ function faSafe(n) { return escHtml(fa(n)); }
 function eq(html) { return `<span class="eq">${html}</span>`; }
 function pct(unit) { return unit ? ' ' + unit : ''; }
 function numOr(v, f) { return typeof v === 'number' && v > 0 ? v : f; }
-function todayKey() {
-  const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-}
+function todayKey() { const d = new Date(); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }
 
 /* ═════════ ۳) THEME ═════════ */
 function isDarkTheme() {
@@ -168,7 +160,7 @@ function speak(text) {
   } catch (_) {}
 }
 
-/* ═════════ ۶) ENCOURAGEMENT ═════════ */
+/* ═════════ ۶) پیام‌های تشویقی ═════════ */
 const GOOD_MSGS = ['🎉 آفرین!', '✨ درست بود!', '💯 عالی!', '🌟 ادامه بده!', '🏆 چه هوشی!', '🎯 دقیق زدی!', '💪 محکم بزن!', '🚀 پرواز کردی!', '🌈 فوق‌العاده!', '⭐ آفرین قهرمان!', '🔥 داری می‌درخشی!', '🧠 مغزت عالی کار می‌کنه!', '😎 حرفه‌ای شدی!'];
 const BAD_MSGS = ['❌ اشکالی نداره، با هم ببینیم:', '🤔 نزدیک بود! بیا نگاه کنیم:', '💡 یاد گرفتن مهم‌تر از درست جواب دادنه:', '🧐 بیا با هم یاد بگیریم:', '🌱 هر اشتباه، یه قدم نزدیک‌تر به یادگیریه:', '📖 بریم راه‌حل رو ببینیم:'];
 function goodMsg() { return pick(GOOD_MSGS); }
@@ -281,14 +273,30 @@ const SC = {
   fill: 'var(--shape-fill)', fill2: 'var(--shape-fill-2)', fill3: 'var(--shape-fill-3)',
   fill4: 'var(--shape-fill-4)', stroke: 'var(--shape-stroke)', accent: 'var(--shape-accent)',
   grid: 'var(--shape-grid)', blank: 'var(--shape-blank)', angle: 'var(--shape-angle)',
-  unit: 'var(--shape-unit)', unitHalf: 'var(--shape-unit-half)'
+  unit: 'var(--shape-unit)', unitHalf: 'var(--shape-unit-half)', dashed: 'var(--shape-dashed)'
 };
 
 /* ═════════ ۱۰) SVG HELPERS ═════════ */
-function svgWrap(w, h, inner) { return `<svg viewBox="0 0 ${w} ${h}" class="shape-svg" role="img" aria-hidden="true">${inner}</svg>`; }
-function label(x, y, txt, anchor = 'middle', cls = 'svg-label') { return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}" direction="rtl">${txt}</text>`; }
-function measureLabel(x, y, txt, anchor = 'middle') { return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="svg-label-measure" direction="rtl">${txt}</text>`; }
-function angleMark(cx, cy, size = 10) { return `<rect x="${cx}" y="${cy - size}" width="${size}" height="${size}" fill="none" stroke="${SC.angle}" stroke-width="1.8"/>`; }
+function svgWrap(w, h, inner) {
+  return `<svg viewBox="0 0 ${w} ${h}" class="shape-svg" role="img" aria-hidden="true">${inner}</svg>`;
+}
+function label(x, y, txt, anchor = 'middle', cls = 'svg-label') {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}" direction="rtl">${txt}</text>`;
+}
+function measureLabel(x, y, txt, anchor = 'middle') {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="svg-label-measure" direction="rtl">${txt}</text>`;
+}
+/* ✅ علامت زاویه‌ی قائمه — داخل شکل (به سمت مرکز شکل) */
+function angleMarkInside(cornerX, cornerY, dirX, dirY, size = 12) {
+  // dirX و dirY نشان‌دهنده‌ی جهت داخل شکل هستند (مثلاً +1 یا -1)
+  const x1 = cornerX + dirX * size;
+  const y1 = cornerY + dirY * size;
+  const x2 = cornerX + dirX * size;
+  const y2 = cornerY;
+  const x3 = cornerX;
+  const y3 = cornerY + dirY * size;
+  return `<polyline points="${x1},${y1} ${x2},${y2} ${x3},${y3}" fill="none" stroke="${SC.angle}" stroke-width="2" class="anim-fade-loop" style="animation-delay:1.8s"/>`;
+}
 function fitPoints(points, W, H, pad) {
   const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
@@ -375,7 +383,7 @@ const Shapes = {
     return svgWrap(W, H,
       `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linejoin="round"/>` +
       `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4"/>` +
-      angleMark(midBC[0], midBC[1]) +
+      angleMarkInside(midBC[0], midBC[1], 1, -1, 10) +
       measureLabel(pA[0] + 14, (pA[1] + midBC[1]) / 2 + 4, fa(height), 'start') +
       label(midBC[0], midBC[1] + 24, fa(base), 'middle', 'svg-label-lg')
     );
@@ -400,7 +408,8 @@ const Shapes = {
     if (showH) {
       const xTop = (pts[3][0] + pts[2][0]) / 2;
       heightLine = `<line x1="${xTop}" y1="${pts[2][1]}" x2="${xTop}" y2="${pts[1][1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4"/>` +
-        angleMark(xTop, pts[1][1]) + measureLabel(xTop + 12, (pts[2][1] + pts[1][1]) / 2 + 4, fa(h), 'start');
+        angleMarkInside(xTop, pts[1][1], 1, -1, 10) +
+        measureLabel(xTop + 12, (pts[2][1] + pts[1][1]) / 2 + 4, fa(h), 'start');
     }
     return svgWrap(W, H,
       `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linejoin="round"/>` +
@@ -444,7 +453,7 @@ const Shapes = {
     return svgWrap(W, H,
       `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linejoin="round"/>` +
       `<line x1="${midTop[0]}" y1="${midTop[1]}" x2="${midTop[0]}" y2="${footY}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4"/>` +
-      angleMark(midTop[0], footY) +
+      angleMarkInside(midTop[0], footY, 1, -1, 10) +
       measureLabel(midTop[0] + 14, (midTop[1] + footY) / 2 + 4, fa(height), 'start') +
       labelOnSegment(pA, pB, cent, fa(smallBase), 22) +
       labelOnSegment(pD, pC, cent, fa(bigBase), 22)
@@ -530,17 +539,24 @@ const Shapes = {
     }
     return svgWrap(W, H, paths);
   },
+  /* ✅ مکعب: اضلاع مساوی + خطوط چین برای پشت */
   cube(edge) {
     const W = 240, H = 220, pad = 40, size = 100, offset = 30;
     const x0 = pad + offset, y0 = pad + offset;
     return svgWrap(W, H,
+      /* خطوط چین پشت */
+      `<line x1="${x0 - offset}" y1="${y0 - offset}" x2="${x0}" y2="${y0}" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      `<line x1="${x0 - offset}" y1="${y0 + size - offset}" x2="${x0}" y2="${y0 + size}" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      `<line x1="${x0 + size - offset}" y1="${y0 - offset}" x2="${x0 + size}" y2="${y0}" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      /* وجه پشت (شفاف) */
+      `<polygon points="${x0 - offset},${y0 - offset} ${x0 + size - offset},${y0 - offset} ${x0 + size - offset},${y0 + size - offset} ${x0 - offset},${y0 + size - offset}" fill="${SC.fill}" fill-opacity="0.2" stroke="${SC.stroke}" stroke-width="2" stroke-linejoin="round"/>` +
+      /* وجه جلو */
       `<polygon points="${x0},${y0} ${x0 + size},${y0} ${x0 + size},${y0 + size} ${x0},${y0 + size}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0 + size - offset},${y0 - offset} ${x0 + size - offset},${y0 + size - offset} ${x0 - offset},${y0 + size - offset}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<line x1="${x0 - offset}" y1="${y0 - offset}" x2="${x0}" y2="${y0}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
-      `<line x1="${x0 + size - offset}" y1="${y0 - offset}" x2="${x0 + size}" y2="${y0}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
-      `<line x1="${x0 - offset}" y1="${y0 + size - offset}" x2="${x0}" y2="${y0 + size}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
-      `<line x1="${x0 + size - offset}" y1="${y0 + size - offset}" x2="${x0 + size}" y2="${y0 + size}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
-      label(x0 + size / 2 - offset / 2, y0 + size - offset + 24, fa(edge), 'middle', 'svg-label-lg')
+      /* وجه بالا */
+      `<polygon points="${x0 - offset},${y0 - offset} ${x0 + size - offset},${y0 - offset} ${x0 + size},${y0} ${x0},${y0}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      /* وجه کنار */
+      `<polygon points="${x0 + size},${y0} ${x0 + size - offset},${y0 - offset} ${x0 + size - offset},${y0 + size - offset} ${x0 + size},${y0 + size}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
+      label(x0 + size / 2, y0 + size + 24, fa(edge), 'middle', 'svg-label-lg')
     );
   },
   box(length, width, height) {
@@ -550,20 +566,27 @@ const Shapes = {
     const A = length * scale, B = height * scale, C = width * scale;
     const offset = 25, x0 = pad + offset, y0 = pad + offset;
     return svgWrap(W, H,
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" rx="3"/>` +
+      /* خطوط چین پشت */
+      `<line x1="${x0 - offset}" y1="${y0 - offset}" x2="${x0}" y2="${y0}" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      `<line x1="${x0 - offset}" y1="${y0 + B - offset}" x2="${x0}" y2="${y0 + B}" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      /* وجه پشت */
+      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" fill-opacity="0.2" stroke="${SC.dashed}" stroke-width="1.5" stroke-dasharray="4 4"/>` +
+      /* وجه جلو */
+      `<rect x="${x0}" y="${y0}" width="${A}" height="${B}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5"/>` +
+      /* وجه بالا */
       `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset},${y0 - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<polygon points="${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 + A - offset},${y0 + B - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round"/>` +
-      label(x0 - offset + A / 2, y0 - offset + B + 24, fa(length), 'middle', 'svg-label-lg') +
-      label(x0 - offset - 12, y0 - offset + B / 2 + 4, fa(height), 'end', 'svg-label-lg') +
-      label(x0 + A - offset + C / 2 + 8, y0 - offset - C * 0.3 - 4, fa(width), 'start', 'svg-label-lg')
+      /* وجه کنار */
+      `<polygon points="${x0 + A},${y0} ${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A + C - offset},${y0 - C * 0.6}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" transform="translate(0, ${B})"/>` +
+      label(x0 + A / 2, y0 + B + 24, fa(length), 'middle', 'svg-label-lg') +
+      label(x0 - 12, y0 + B / 2 + 4, fa(height), 'end', 'svg-label-lg') +
+      label(x0 + A + C / 2 + 8, y0 - C * 0.3 - 4 + B, fa(width), 'start', 'svg-label-lg')
     );
   }
 };
 
-/* ═════════ ۱۲) COMPOSITES (ترکیب‌های پیچیده) ═════════ */
-/* هر ترکیب یک گرید ۲بعدی است. هر خانه = ۱ مربع واحد. */
-/* مساحت = تعداد خانه‌ها × cellSize² */
-/* محیط = تعداد یال‌های مرزی × cellSize */
+/* ═════════ ۱۲) COMPOSITES ═════════ */
+/* هر ترکیب با ابعاد مشخص. cellSize = کوچک‌ترین واحد. */
+/* برای مساحت: جمع سلول‌ها. برای محیط: تعداد یال‌های مرزی. */
 
 const COMPOSITES = {
   rocket: {
@@ -577,10 +600,15 @@ const COMPOSITES = {
       [1,0,0,0,1]
     ],
     parts: [
-      { label: 'نوک موشک', count: 2 },
-      { label: 'بدنه باریک', count: 6 },
-      { label: 'قسمت پهن پایین', count: 5 },
-      { label: 'دو باله کنار', count: 2 }
+      { label: 'نوک موشک (۱×۲)', cells: 2 },
+      { label: 'بدنه باریک (۳×۲)', cells: 6 },
+      { label: 'قسمت پهن پایین (۵×۱)', cells: 5 },
+      { label: 'دو باله کنار (۱×۱ هر کدام)', cells: 2 }
+    ],
+    /* ابعاد کنار اضلاع برای تمرین خواندن ابعاد از روی شکل */
+    dimensionLabels: [
+      { cells: [{ r: 0, c: 2 }], axis: 'top', text: '۱' },
+      { cells: [{ r: 0, c: 2 }], axis: 'right', text: '۲' }
     ]
   },
   robot: {
@@ -596,10 +624,14 @@ const COMPOSITES = {
       [0,1,0,1,0]
     ],
     parts: [
-      { label: 'سر (۲ ردیف × ۳ ستون)', count: 6 },
-      { label: 'بدن و دست‌ها (۲ ردیف × ۵ ستون)', count: 10 },
-      { label: 'شکم (۲ ردیف × ۳ ستون)', count: 6 },
-      { label: 'دو پا (۲ ردیف × ۱ ستون هر پا)', count: 4 }
+      { label: 'سر (۲ ردیف × ۳ ستون)', cells: 6 },
+      { label: 'بدن و دست‌ها (۲ ردیف × ۵ ستون)', cells: 10 },
+      { label: 'شکم (۲ ردیف × ۳ ستون)', cells: 6 },
+      { label: 'دو پا (۲ ردیف × ۱ ستون هر پا)', cells: 4 }
+    ],
+    dimensionLabels: [
+      { cells: [{ r: 0, c: 1 }], axis: 'top', text: '۳' },
+      { cells: [{ r: 0, c: 1 }], axis: 'right', text: '۲' }
     ]
   },
   castle: {
@@ -613,9 +645,12 @@ const COMPOSITES = {
       [1,1,1,0,1,1,1]
     ],
     parts: [
-      { label: 'نوک برج‌ها (ردیف اول)', count: 5 },
-      { label: '۴ ردیف وسط (۷ × ۴)', count: 28 },
-      { label: 'ردیف پایین (بدون دروازه)', count: 6 }
+      { label: 'نوک برج‌ها (ردیف اول)', cells: 5 },
+      { label: '۴ ردیف وسط (۷ × ۴)', cells: 28 },
+      { label: 'ردیف پایین (بدون دروازه)', cells: 6 }
+    ],
+    dimensionLabels: [
+      { cells: [{ r: 1, c: 0 }], axis: 'top', text: '۷' }
     ]
   },
   tree: {
@@ -631,12 +666,12 @@ const COMPOSITES = {
       [0,0,1,0,0]
     ],
     parts: [
-      { label: 'نوک درخت', count: 1 },
-      { label: 'طبقه دوم (۳ خانه)', count: 3 },
-      { label: 'طبقه سوم پهن (۵ خانه)', count: 5 },
-      { label: 'طبقه چهارم (۳ خانه)', count: 3 },
-      { label: 'دو طبقه پهن آخر (۵ + ۵)', count: 10 },
-      { label: 'تنه (۲ خانه)', count: 2 }
+      { label: 'نوک درخت (۱×۱)', cells: 1 },
+      { label: 'طبقه دوم (۳×۱)', cells: 3 },
+      { label: 'طبقه سوم (۵×۱)', cells: 5 },
+      { label: 'طبقه چهارم (۳×۱)', cells: 3 },
+      { label: 'دو طبقه پهن (۵ + ۵)', cells: 10 },
+      { label: 'تنه (۱×۲)', cells: 2 }
     ]
   },
   boat: {
@@ -649,10 +684,10 @@ const COMPOSITES = {
       [1,1,1,1,1]
     ],
     parts: [
-      { label: 'نوک بادبان', count: 1 },
-      { label: 'بادبان (ردیف دوم)', count: 2 },
-      { label: 'بادبان (ردیف سوم)', count: 3 },
-      { label: 'بدنه قایق (۲ ردیف پایین)', count: 10 }
+      { label: 'نوک بادبان (۱×۱)', cells: 1 },
+      { label: 'بادبان ردیف دوم (۲×۱)', cells: 2 },
+      { label: 'بادبان ردیف سوم (۳×۱)', cells: 3 },
+      { label: 'بدنه قایق (۵×۲)', cells: 10 }
     ]
   },
   house: {
@@ -667,9 +702,9 @@ const COMPOSITES = {
       [1,1,1,1,1]
     ],
     parts: [
-      { label: 'نوک سقف', count: 1 },
-      { label: 'سقف (ردیف دوم)', count: 3 },
-      { label: 'پنج ردیف دیوار (۵ × ۵)', count: 25 }
+      { label: 'نوک سقف (۱×۱)', cells: 1 },
+      { label: 'سقف (۳×۱)', cells: 3 },
+      { label: 'پنج ردیف دیوار (۵×۵)', cells: 25 }
     ]
   },
   fish: {
@@ -682,11 +717,11 @@ const COMPOSITES = {
       [0,0,1,1,0,0]
     ],
     parts: [
-      { label: 'باله بالا (۲ خانه)', count: 2 },
-      { label: 'ردیف دوم (۴ خانه)', count: 4 },
-      { label: 'بدن ماهی (ردیف وسط، ۶ خانه)', count: 6 },
-      { label: 'ردیف چهارم (۴ خانه)', count: 4 },
-      { label: 'باله پایین (۲ خانه)', count: 2 }
+      { label: 'باله بالا (۲×۱)', cells: 2 },
+      { label: 'ردیف دوم (۴×۱)', cells: 4 },
+      { label: 'بدن ماهی (۶×۱)', cells: 6 },
+      { label: 'ردیف چهارم (۴×۱)', cells: 4 },
+      { label: 'باله پایین (۲×۱)', cells: 2 }
     ]
   }
 };
@@ -718,11 +753,11 @@ function compositePerimeter(composite, cellSize) {
   return compositeEdgeCount(composite) * cellSize;
 }
 
-/* رندر SVG ترکیب — حالت ساده (فقط fill) */
+/* رندر SVG ترکیب */
 function compositeSVG(composite, cellSize, withPerimeterStroke = false, withAnim = false) {
   const g = composite.grid;
   const rows = g.length, cols = g[0].length;
-  const pad = 30;
+  const pad = 40;
   const W = cols * cellSize + 2 * pad;
   const H = rows * cellSize + 2 * pad;
   const x0 = pad, y0 = pad;
@@ -762,7 +797,7 @@ function compositeSVG(composite, cellSize, withPerimeterStroke = false, withAnim
 
 /* ═════════ ۱۳) SHAPES ANIM ═════════ */
 const ShapesAnim = {
-  /* ─── محیط: gradual با line ─── */
+  /* ─── محیط: gradual با خط‌به‌خط ─── */
   tracingSquare(side) {
     const W = 240, H = 220, pad = 50;
     const box = Math.min(W, H) - 2 * pad;
@@ -814,8 +849,7 @@ const ShapesAnim = {
       `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${SC.fill}" fill-opacity="0.3"/>` +
       `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${SC.stroke}" stroke-width="5" stroke-linecap="round" class="anim-draw-loop" style="--len:${circ};transform-origin:${cx}px ${cy}px;transform:rotate(-90deg)"/>` +
       `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:.2s"/>` +
-      `<line x1="${cx}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="${SC.accent}" stroke-width="2" stroke-dasharray="4 4" opacity="0.4"/>` +
-      measureLabel(cx + R / 2, cy - 8, fa(r), 'middle')
+      measureLabel(cx, cy + R + 22, fa(r), 'middle')
     );
   },
   circleRadiusAnim(r) {
@@ -901,7 +935,7 @@ const ShapesAnim = {
     );
   },
 
-  /* ─── مساحت: فقط fill، بدون خط دور ─── */
+  /* ─── مساحت: بدون خط دور، فقط fill ─── */
   areaSquare(side) { return areaStageGeneric({ shape: 'square', W: 240, H: 220, data: { side: numOr(side, 3) }, baseLabel: fa(side) + ' سانتی‌متر' }); },
   areaRectangle(w, h) { return areaStageGeneric({ shape: 'rect', W: 280, H: 220, data: { w: numOr(w, 3), h: numOr(h, 2) } }); },
   areaTriangle(base, height) { return areaStageGeneric({ shape: 'tri', W: 280, H: 240, data: { base: numOr(base, 4), height: numOr(height, 3) }, heightLabel: fa(height), baseLabel: fa(base) }); },
@@ -909,6 +943,48 @@ const ShapesAnim = {
   areaParallelogram(base, height) { return areaStageGeneric({ shape: 'para', W: 280, H: 240, data: { base: numOr(base, 5), height: numOr(height, 3) }, baseLabel: fa(base), heightLabel: fa(height) }); },
   areaRhombus(d1, d2) { return areaStageGeneric({ shape: 'rhom', W: 280, H: 240, data: { d1: numOr(d1, 6), d2: numOr(d2, 4) }, baseLabel: fa(d2), heightLabel: fa(d1) }); },
   areaTrapezoid(bigBase, smallBase, height) { return areaStageGeneric({ shape: 'trap', W: 280, H: 240, data: { bigBase: numOr(bigBase, 8), smallBase: numOr(smallBase, 5), height: numOr(height, 3) }, heightLabel: fa(height) }); },
+  /* ✅ انواع مثلث برای مساحت */
+  areaRightTriangle(a, b) {
+    // قائم‌الزاویه در B
+    const W = 280, H = 240, pad = 55;
+    const A = [0, b], B = [0, 0], C = [a, 0];
+    const pts = mathToSvg([A, B, C], W, H, pad);
+    const [pA, pB, pC] = pts;
+    const fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
+    const baseLine = `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.abs(pC[0]-pB[0])};animation-delay:2s"/>`;
+    const heightLine = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${pB[0]}" y2="${pB[1]}" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-pB[1])};animation-delay:1.2s"/>`;
+    const rightAngle = angleMarkInside(pB[0], pB[1], 1, -1, 12);
+    return svgWrap(W, H, fill + heightLine + baseLine + rightAngle +
+      measureLabel(pA[0] - 12, (pA[1] + pB[1]) / 2 + 4, fa(b), 'end') +
+      label((pB[0] + pC[0]) / 2, pB[1] + 24, fa(a), 'middle', 'svg-label-lg')
+    );
+  },
+  areaIsoscelesTriangle(base, height) {
+    return areaStageGeneric({
+      shape: 'tri',
+      W: 280, H: 240,
+      data: { base: numOr(base, 4), height: numOr(height, 3) },
+      heightLabel: fa(height), baseLabel: fa(base)
+    });
+  },
+  areaScaleneTriangle(a, b, c) {
+    const W = 280, H = 240, pad = 55;
+    const v = triangleFromSides(a, b, c);
+    const pts = mathToSvg([v.A, v.B, v.C], W, H, pad);
+    const [pA, pB, pC] = pts;
+    const cent = polyCentroid(pts);
+    const fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
+    // ارتفاع: از pA عمود بر pB-pC
+    const midBC = [(pB[0] + pC[0]) / 2, (pB[1] + pC[1]) / 2];
+    const heightLine = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-midBC[1])};animation-delay:1.2s"/>`;
+    const baseLine = `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(Math.hypot(pC[0]-pB[0], pC[1]-pB[1]))};animation-delay:2s"/>`;
+    const rightAngle = angleMarkInside(midBC[0], midBC[1], 1, -1, 10);
+    return svgWrap(W, H, fill + heightLine + baseLine + rightAngle +
+      labelOnSegment(pA, pB, cent, fa(c), 18) +
+      labelOnSegment(pB, pC, cent, fa(a), 18) +
+      labelOnSegment(pC, pA, cent, fa(b), 18)
+    );
+  },
 
   /* ─── مربع‌های واحد ─── */
   unitSquaresRect(w, h) { return unitSquaresAnim(w, h); },
@@ -917,37 +993,16 @@ const ShapesAnim = {
   gridSquare(s) { return unitSquaresAnim(s, s); },
   triangleAreaAnim(base, height) { return ShapesAnim.areaTriangle(base, height); },
 
-  /* ─── حجم: ساخت مرحله‌ای ۶ وجه ─── */
+  /* ─── حجم: با مکعب‌های ۱×۱ + خطوط چین ─── */
   cubeBuild(edge) {
-    const W = 240, H = 220, pad = 40, size = 100, offset = 30;
-    const x0 = pad + offset, y0 = pad + offset;
-    return svgWrap(W, H,
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${size}" height="${size}" fill="${SC.fill}" fill-opacity="0.15" class="anim-fade-loop" style="animation-delay:0s"/>` +
-      `<polygon points="${x0 - offset},${y0 + size - offset} ${x0 + size - offset},${y0 + size - offset} ${x0 + size},${y0 + size} ${x0},${y0 + size}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:0.3s"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0},${y0} ${x0},${y0 + size} ${x0 - offset},${y0 + size - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:0.7s"/>` +
-      `<polygon points="${x0 + size - offset},${y0 - offset} ${x0 + size},${y0} ${x0 + size},${y0 + size} ${x0 + size - offset},${y0 + size - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:1.1s"/>` +
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${size}" height="${size}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-fade-loop" style="animation-delay:1.5s"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0},${y0} ${x0 + size},${y0} ${x0 + size - offset},${y0 - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:1.9s"/>` +
-      label(x0 + size / 2 - offset / 2, y0 + size - offset + 24, fa(edge), 'middle', 'svg-label-lg')
-    );
+    const n = Math.min(6, Math.max(2, Math.round(numOr(edge, 3))));
+    return cubeUnitBuild(n);
   },
   boxBuild(length, width, height) {
-    const W = 280, H = 220, pad = 40;
-    const maxDim = Math.max(length, width, height);
-    const scale = 90 / maxDim;
-    const A = length * scale, B = height * scale, C = width * scale;
-    const offset = 25, x0 = pad + offset, y0 = pad + offset;
-    return svgWrap(W, H,
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" fill-opacity="0.15" class="anim-fade-loop" style="animation-delay:0s"/>` +
-      `<polygon points="${x0 - offset},${y0 + B - offset} ${x0 + A - offset},${y0 + B - offset} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 - offset + C},${y0 + B - offset - C * 0.6}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:0.3s"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 - offset + C},${y0 + B - offset - C * 0.6} ${x0 - offset},${y0 + B - offset}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:0.8s"/>` +
-      `<polygon points="${x0 + A - offset},${y0 - offset} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 + B - offset - C * 0.6} ${x0 + A - offset},${y0 + B - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:1.3s"/>` +
-      `<rect x="${x0 - offset}" y="${y0 - offset}" width="${A}" height="${B}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="2.5" rx="3" class="anim-fade-loop" style="animation-delay:1.8s"/>` +
-      `<polygon points="${x0 - offset},${y0 - offset} ${x0 - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset + C},${y0 - offset - C * 0.6} ${x0 + A - offset},${y0 - offset}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linejoin="round" class="anim-fade-loop" style="animation-delay:2.3s"/>` +
-      label(x0 - offset + A / 2, y0 - offset + B + 24, fa(length), 'middle', 'svg-label-lg') +
-      label(x0 - offset - 12, y0 - offset + B / 2 + 4, fa(height), 'end', 'svg-label-lg') +
-      label(x0 + A - offset + C / 2 + 8, y0 - offset - C * 0.3 - 4, fa(width), 'start', 'svg-label-lg')
-    );
+    const L = Math.min(6, Math.max(2, Math.round(numOr(length, 3))));
+    const W = Math.min(6, Math.max(2, Math.round(numOr(width, 2))));
+    const H = Math.min(6, Math.max(2, Math.round(numOr(height, 3))));
+    return boxUnitBuild(L, W, H);
   },
 
   /* ─── کسرها ─── */
@@ -1004,7 +1059,7 @@ const ShapesAnim = {
     return svgWrap(W, H, line);
   },
   decimalLine(marks, highlight, from, to) {
-    const W = 360, H = 100, pad = 30, y = 50;
+    const W = 360, H = 110, pad = 30, y = 55;
     const range = to - from, step = (W - 2 * pad) / range;
     let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
     for (let i = 0; i <= range * 10; i++) {
@@ -1016,14 +1071,15 @@ const ShapesAnim = {
     }
     if (highlight != null) {
       const hx = pad + (highlight - from) * step;
-      line += `<circle cx="${hx}" cy="${y}" r="8" fill="${SC.accent}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:.5s"/>`;
+      line += `<circle cx="${hx}" cy="${y}" r="9" fill="${SC.accent}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:.5s"/>`;
       line += `<line x1="${hx}" y1="${y - 22}" x2="${hx}" y2="${y - 9}" stroke="${SC.accent}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:13;animation-delay:.3s"/>`;
-      line += `<text x="${hx}" y="${y - 32}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.accent}">${faDec(highlight, 2)}</text>`;
+      /* ✅ جواب روی محور نمایش داده نمی‌شود */
     }
     return svgWrap(W, H, line);
   },
+  /* ✅ اعشار جمع: قوس از صفر به a، سپس از a به a+b */
   decimalAddOnLine(from, to, a, b) {
-    const W = 380, H = 140, pad = 30, y = 75;
+    const W = 400, H = 150, pad = 30, y = 85;
     const range = to - from, step = (W - 2 * pad) / range;
     let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
     for (let i = 0; i <= range * 10; i++) {
@@ -1035,19 +1091,28 @@ const ShapesAnim = {
     const x0 = pad;
     const ax = pad + (a - from) * step;
     const bx = pad + (a + b - from) * step;
-    line += `<line x1="${x0}" y1="${y - 30}" x2="${ax}" y2="${y - 30}" stroke="${SC.accent}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(ax - x0)};animation-delay:0s"/>`;
-    line += `<polygon points="${ax},${y - 30} ${ax - 8},${y - 35} ${ax - 8},${y - 25}" fill="${SC.accent}" class="anim-fade-loop" style="animation-delay:0.6s"/>`;
-    line += `<text x="${(x0 + ax) / 2}" y="${y - 37}" text-anchor="middle" class="svg-label" style="fill:${SC.accent};font-weight:700" direction="rtl">${faDec(a, 1)}</text>`;
-    line += `<line x1="${ax}" y1="${y - 65}" x2="${bx}" y2="${y - 65}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(bx - ax)};animation-delay:0.8s"/>`;
-    line += `<polygon points="${bx},${y - 65} ${bx - 8},${y - 70} ${bx - 8},${y - 60}" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:1.4s"/>`;
-    line += `<text x="${(ax + bx) / 2}" y="${y - 72}" text-anchor="middle" class="svg-label" style="fill:${SC.stroke};font-weight:700" direction="rtl">${faDec(b, 1)}</text>`;
-    line += `<circle cx="${x0}" cy="${y}" r="6" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2" class="anim-pop-loop"/>`;
-    line += `<circle cx="${ax}" cy="${y}" r="6" fill="${SC.accent}" stroke="${SC.stroke}" stroke-width="2" class="anim-pop-loop" style="animation-delay:0.6s"/>`;
-    line += `<circle cx="${bx}" cy="${y}" r="8" fill="${SC.stroke}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:1.4s"/>`;
+    /* قوس اول: ۰ → a */
+    const arcTopY = y - 55;
+    line += `<path d="M ${x0} ${y - 10} Q ${(x0 + ax) / 2} ${arcTopY} ${ax} ${y - 10}" fill="none" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:150;animation-delay:0s"/>`;
+    line += `<polygon points="${ax},${y - 10} ${ax - 4},${y - 20} ${ax + 6},${y - 16}" fill="${SC.accent}" class="anim-fade-loop" style="animation-delay:0.6s"/>`;
+    /* عدد اول — روی بالای قوس */
+    line += `<text x="${(x0 + ax) / 2}" y="${arcTopY + 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.accent}" direction="rtl">${faDec(a, 1)}</text>`;
+    /* قوس دوم: a → a+b */
+    const arc2TopY = y - 30;
+    line += `<path d="M ${ax} ${y - 10} Q ${(ax + bx) / 2} ${arc2TopY} ${bx} ${y - 10}" fill="none" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:120;animation-delay:0.8s"/>`;
+    line += `<polygon points="${bx},${y - 10} ${bx - 4},${y - 20} ${bx + 6},${y - 16}" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:1.4s"/>`;
+    /* عدد دوم — روی بالای قوس */
+    line += `<text x="${(ax + bx) / 2}" y="${arc2TopY + 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.stroke}" direction="rtl">${faDec(b, 1)}</text>`;
+    /* نقاط */
+    line += `<circle cx="${x0}" cy="${y}" r="7" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-pop-loop"/>`;
+    line += `<text x="${x0}" y="${y + 30}" text-anchor="middle" class="svg-label" direction="rtl">۰</text>`;
+    line += `<circle cx="${ax}" cy="${y}" r="7" fill="${SC.accent}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-pop-loop" style="animation-delay:0.6s"/>`;
+    line += `<circle cx="${bx}" cy="${y}" r="9" fill="${SC.stroke}" stroke="var(--card)" stroke-width="2.5" class="anim-pop-loop" style="animation-delay:1.4s"/>`;
     return svgWrap(W, H, line);
   },
+  /* ✅ اعشار تفریق: از صفر قوس به a، سپس قوس برگشتی به a−b */
   decimalSubOnLine(from, to, a, b) {
-    const W = 380, H = 140, pad = 30, y = 75;
+    const W = 400, H = 150, pad = 30, y = 85;
     const range = to - from, step = (W - 2 * pad) / range;
     let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
     for (let i = 0; i <= range * 10; i++) {
@@ -1060,15 +1125,20 @@ const ShapesAnim = {
     const ax = pad + (a - from) * step;
     const result = Math.max(0, a - b);
     const rx = pad + (result - from) * step;
-    line += `<line x1="${x0}" y1="${y - 30}" x2="${ax}" y2="${y - 30}" stroke="${SC.accent}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(ax - x0)};animation-delay:0s"/>`;
-    line += `<polygon points="${ax},${y - 30} ${ax - 8},${y - 35} ${ax - 8},${y - 25}" fill="${SC.accent}" class="anim-fade-loop" style="animation-delay:0.6s"/>`;
-    line += `<text x="${(x0 + ax) / 2}" y="${y - 37}" text-anchor="middle" class="svg-label" style="fill:${SC.accent};font-weight:700" direction="rtl">${faDec(a, 1)}</text>`;
-    line += `<line x1="${ax}" y1="${y - 65}" x2="${rx}" y2="${y - 65}" stroke="${SC.stroke}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(ax - rx)};animation-delay:0.8s"/>`;
-    line += `<polygon points="${rx},${y - 65} ${rx + 8},${y - 70} ${rx + 8},${y - 60}" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:1.4s"/>`;
-    line += `<text x="${(ax + rx) / 2}" y="${y - 72}" text-anchor="middle" class="svg-label" style="fill:${SC.stroke};font-weight:700" direction="rtl">${faDec(b, 1)}</text>`;
-    line += `<circle cx="${x0}" cy="${y}" r="6" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2" class="anim-pop-loop"/>`;
-    line += `<circle cx="${ax}" cy="${y}" r="6" fill="${SC.accent}" stroke="${SC.stroke}" stroke-width="2" class="anim-pop-loop" style="animation-delay:0.6s"/>`;
-    line += `<circle cx="${rx}" cy="${y}" r="8" fill="${SC.stroke}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:1.4s"/>`;
+    /* قوس اول: ۰ → a */
+    const arcTopY = y - 55;
+    line += `<path d="M ${x0} ${y - 10} Q ${(x0 + ax) / 2} ${arcTopY} ${ax} ${y - 10}" fill="none" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:150;animation-delay:0s"/>`;
+    line += `<polygon points="${ax},${y - 10} ${ax - 4},${y - 20} ${ax + 6},${y - 16}" fill="${SC.accent}" class="anim-fade-loop" style="animation-delay:0.6s"/>`;
+    line += `<text x="${(x0 + ax) / 2}" y="${arcTopY + 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.accent}" direction="rtl">${faDec(a, 1)}</text>`;
+    /* قوس دوم: a → a−b (به چپ) */
+    const arc2TopY = y - 30;
+    line += `<path d="M ${ax} ${y - 10} Q ${(ax + rx) / 2} ${arc2TopY} ${rx} ${y - 10}" fill="none" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:120;animation-delay:0.8s"/>`;
+    line += `<polygon points="${rx},${y - 10} ${rx + 4},${y - 20} ${rx - 6},${y - 16}" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:1.4s"/>`;
+    line += `<text x="${(ax + rx) / 2}" y="${arc2TopY + 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.stroke}" direction="rtl">${faDec(b, 1)}</text>`;
+    line += `<circle cx="${x0}" cy="${y}" r="7" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-pop-loop"/>`;
+    line += `<text x="${x0}" y="${y + 30}" text-anchor="middle" class="svg-label" direction="rtl">۰</text>`;
+    line += `<circle cx="${ax}" cy="${y}" r="7" fill="${SC.accent}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-pop-loop" style="animation-delay:0.6s"/>`;
+    line += `<circle cx="${rx}" cy="${y}" r="9" fill="${SC.stroke}" stroke="var(--card)" stroke-width="2.5" class="anim-pop-loop" style="animation-delay:1.4s"/>`;
     return svgWrap(W, H, line);
   },
   decCompareBars(v1, v2) {
@@ -1087,6 +1157,7 @@ const ShapesAnim = {
       `<rect x="${pad}" y="${y2}" width="${w2}" height="${barH}" fill="${SC.fill3}" rx="6" class="anim-pop-loop" style="animation-delay:.3s"/>`
     );
   },
+  /* ترکیب‌ها */
   compositeShape(compositeKey, cellSize) {
     const composite = COMPOSITES[compositeKey];
     if (!composite) return '';
@@ -1099,7 +1170,93 @@ const ShapesAnim = {
   }
 };
 
+/* ─── توابع کمکی: مکعب و مکعب مستطیل با مکعب‌های ۱×۱ ─── */
+function cubeUnitBuild(n) {
+  /* نمایش یک مکعب n×n×n با مکعب‌های ۱×۱ در وجه جلو */
+  const cell = 18;
+  const W = n * cell + 80, H = n * cell + 80;
+  const x0 = 40, y0 = 40;
+  const offX = 20, offY = 18; // زاویه سه‌بعدی
+  let cells = '';
+  let idx = 0;
+  /* وجه جلو با مکعب‌ها */
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const x = x0 + c * cell;
+      const y = y0 + r * cell;
+      const delay = (idx * 0.04).toFixed(2);
+      cells += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="1.2" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
+      idx++;
+    }
+  }
+  /* وجه بالا (نمایش ۳بعدی) */
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      const x = x0 + c * cell + offX;
+      const y = y0 + r * cell - offY * (n - r) + offY * 0 - offY;
+      // فقط ردیف آخر را نشان بده برای سادگی
+    }
+  }
+  /* وجه بالا به صورت سلول‌های روی خط بالا */
+  let topRow = '';
+  for (let c = 0; c < n; c++) {
+    const x = x0 + c * cell;
+    const y = y0 - offY;
+    topRow += `<rect x="${x}" y="${y}" width="${cell}" height="${offY}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="1"/>`;
+  }
+  /* وجه راست */
+  let rightCol = '';
+  for (let r = 0; r < n; r++) {
+    const x = x0 + n * cell;
+    const y = y0 + r * cell - offY;
+    rightCol += `<rect x="${x}" y="${y}" width="${offX}" height="${cell}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="1"/>`;
+  }
+  return svgWrap(W, H,
+    topRow + rightCol + cells +
+    label(x0 + n * cell / 2, y0 + n * cell + 26, fa(n) + ' × ' + fa(n) + ' × ' + fa(n), 'middle', 'svg-label-lg')
+  );
+}
+function boxUnitBuild(L, W2, H) {
+  const cell = 16;
+  const W = L * cell + 100, Hh = H * cell + 100;
+  const x0 = 50, y0 = 40;
+  const offX = 22, offY = 20;
+  let cells = '';
+  /* وجه جلو: L×H */
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < L; c++) {
+      const x = x0 + c * cell;
+      const y = y0 + r * cell;
+      const delay = ((r * L + c) * 0.03).toFixed(2);
+      cells += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="1" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
+    }
+  }
+  /* وجه بالا: L×W2 */
+  let topRow = '';
+  for (let r = 0; r < W2; r++) {
+    for (let c = 0; c < L; c++) {
+      const x = x0 + c * cell + r * (offX / W2);
+      const y = y0 - (r + 1) * (offY / W2);
+      topRow += `<rect x="${x}" y="${y}" width="${cell}" height="${offY / W2}" fill="${SC.fill3}" stroke="${SC.stroke}" stroke-width="0.8"/>`;
+    }
+  }
+  /* وجه راست: W2×H */
+  let rightCol = '';
+  for (let r = 0; r < H; r++) {
+    for (let c = 0; c < W2; c++) {
+      const x = x0 + L * cell + c * (offX / W2);
+      const y = y0 + r * cell - offY + c * (offY / W2);
+      rightCol += `<rect x="${x}" y="${y}" width="${offX / W2}" height="${cell}" fill="${SC.fill4}" stroke="${SC.stroke}" stroke-width="0.8"/>`;
+    }
+  }
+  return svgWrap(W, Hh,
+    topRow + rightCol + cells +
+    label(x0 + L * cell / 2, y0 + H * cell + 26, fa(L) + ' × ' + fa(W2) + ' × ' + fa(H), 'middle', 'svg-label-lg')
+  );
+}
 /* ═════════ ۱۴) AREA GENERIC (بدون خط دور، بدون فرمول) ═════════ */
+/* انیمیشن ۳ مرحله‌ای برای مثلث: ارتفاع → قاعده → زاویه قائمه */
+/* برای بقیه: فقط fill (پالس) + خطوط اندازه‌گیری */
 function areaStageGeneric(opts) {
   const { shape, W, H, data, baseLabel, heightLabel } = opts;
   let fill = '', measure = '';
@@ -1119,14 +1276,20 @@ function areaStageGeneric(opts) {
     measure = label(x + rw / 2, y + rh + 24, fa(w), 'middle', 'svg-label-lg') +
       label(x - 12, y + rh / 2 + 4, fa(h), 'end', 'svg-label-lg');
   } else if (shape === 'tri') {
+    /* ✅ ترتیب: ارتفاع → قاعده → زاویه قائمه */
     const base_ = data.base, h = data.height;
     const A = [base_ / 2, h], B = [0, 0], C = [base_, 0];
     const pts = mathToSvg([A, B, C], W, H, pad);
     const [pA, pB, pC] = pts;
     const midBC = [(pB[0] + pC[0]) / 2, (pB[1] + pC[1]) / 2];
     fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
-    measure = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-midBC[1])};animation-delay:1.5s"/>` +
-      angleMark(midBC[0], midBC[1]) +
+    /* 1) ارتفاع (خط چین) */
+    const heightLine = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-midBC[1])};animation-delay:1.5s"/>`;
+    /* 2) قاعده (خط نارنجی روی خط پایین) */
+    const baseLine = `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(Math.hypot(pC[0]-pB[0], pC[1]-pB[1]))};animation-delay:2.5s"/>`;
+    /* 3) زاویه قائمه در تلاقی ارتفاع و قاعده */
+    const rightAngle = angleMarkInside(midBC[0], midBC[1], 1, -1, 12);
+    measure = heightLine + baseLine + rightAngle +
       measureLabel(pA[0] + 14, (pA[1] + midBC[1]) / 2 + 4, heightLabel || fa(h), 'start') +
       label(midBC[0], midBC[1] + 24, baseLabel || fa(base_), 'middle', 'svg-label-lg');
   } else if (shape === 'circle') {
@@ -1142,7 +1305,7 @@ function areaStageGeneric(opts) {
     const xTop = (pts[3][0] + pts[2][0]) / 2;
     fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
     measure = `<line x1="${xTop}" y1="${pts[2][1]}" x2="${xTop}" y2="${pts[1][1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pts[1][1]-pts[2][1])};animation-delay:1.5s"/>` +
-      angleMark(xTop, pts[1][1]) +
+      angleMarkInside(xTop, pts[1][1], 1, -1, 10) +
       measureLabel(xTop + 12, (pts[2][1] + pts[1][1]) / 2 + 4, heightLabel || fa(h), 'start') +
       labelOnSegment(pts[3], pts[2], cent, baseLabel || fa(b), 18);
   } else if (shape === 'rhom') {
@@ -1163,7 +1326,7 @@ function areaStageGeneric(opts) {
     const footY = (pts[2][1] + pts[3][1]) / 2;
     fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
     measure = `<line x1="${midTop[0]}" y1="${midTop[1]}" x2="${midTop[0]}" y2="${footY}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(midTop[1]-footY)};animation-delay:1.5s"/>` +
-      angleMark(midTop[0], footY) +
+      angleMarkInside(midTop[0], footY, 1, -1, 10) +
       measureLabel(midTop[0] + 12, (midTop[1] + footY) / 2 + 4, heightLabel || fa(h), 'start') +
       labelOnSegment(pts[0], pts[1], cent, fa(sb), 22) +
       labelOnSegment(pts[3], pts[2], cent, fa(bb), 22);
@@ -1189,7 +1352,6 @@ function unitSquaresAnim(w, h) {
       cells += `<rect x="${(x0 + i * s).toFixed(1)}" y="${(y0 + j * s).toFixed(1)}" width="${s.toFixed(1)}" height="${s.toFixed(1)}" fill="${SC.unit}" stroke="${SC.grid}" stroke-width="1" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
     }
   }
-  cells += `<rect x="${x0}" y="${y0}" width="${rw}" height="${rh}" fill="none" stroke="${SC.stroke}" stroke-width="2.5" rx="2"/>`;
   const countLabel = `<text x="${W / 2}" y="${y0 + rh + 26}" text-anchor="middle" class="svg-label-lg" direction="rtl">${fa(wN)} × ${fa(hN)} = ${fa(total)} مربع</text>`;
   return svgWrap(W, H, cells + countLabel);
 }
@@ -1223,15 +1385,21 @@ function wrapAnim(html, opts) {
 }
 
 /* ═════════ ۱۷) DIFFICULTY ═════════ */
+/* ✅ ابعاد: سطح ≤ ۱۰، حجم ≤ ۶ */
 function diffRange(diff) {
-  if (diff === 'easy') return [2, 6];
-  if (diff === 'hard') return [6, 12];
-  return [4, 9];
+  if (diff === 'easy') return [2, 5];
+  if (diff === 'hard') return [5, 10];
+  return [3, 7];
+}
+function diffVolumeRange(diff) {
+  if (diff === 'easy') return [2, 4];
+  if (diff === 'hard') return [4, 6];
+  return [3, 5];
 }
 function diffCellSize(diff) {
-  if (diff === 'easy') return 14;
-  if (diff === 'hard') return 10;
-  return 12;
+  if (diff === 'easy') return 16;
+  if (diff === 'hard') return 11;
+  return 13;
 }
 
 /* ═════════ ۱۸) UNITS CARD ═════════ */
@@ -1401,28 +1569,23 @@ function genParkPerimeter(diff) {
 }
 genParkPerimeter.levels = ['hard'];
 
-/* ─── محیط ترکیب‌های پیچیده ─── */
+/* ─── محیط ترکیب‌ها ─── */
 function makeCompositePerimeterGen(key) {
   function gen(diff) {
     const comp = COMPOSITES[key];
     const cellSize = diffCellSize(diff);
     const ans = compositePerimeter(comp, cellSize);
     const cellCount = compositeCellCount(comp);
-    const edgeCount = compositeEdgeCount(comp);
-    // distractors: با تغییرات کوچک
     const distractors = [ans + cellSize * 2, ans - cellSize, ans + cellSize * 4, cellCount * cellSize];
-    const unit = `سانتی‌متر`;
-    const parts = comp.parts.map(p => p.label).join(' • ');
     return {
       topic: 'perimeter',
       key: `comp-${key}-p`,
-      prompt: `این شکل یک ${comp.name} است که از چند بخش ساخته شده. محیط کل (خط دور) آن چقدر است؟`,
+      prompt: `این شکل یک ${comp.name} است که از چند بخش ساخته شده. محیط کل (دور تا دور) چقدر است؟`,
       shape: ShapesAnim.compositePerimeter(key, cellSize),
-      type: 'numeric', answer: ans, unit, distractors,
+      type: 'numeric', answer: ans, unit: 'سانتی‌متر', distractors,
       steps: [
-        `اضلاع مرزی شکل را می‌شماریم.`,
-        `تعداد ضلع × طول هر ضلع (${fa(cellSize)}) = محیط`,
-        `محیط = ${fa(ans)} ${unit}`
+        `خط دور شکل را می‌شماریم.`,
+        `محیط = ${fa(ans)} سانتی‌متر`
       ]
     };
   }
@@ -1439,7 +1602,7 @@ function genSquareArea(diff) {
   const [a, b] = diffRange(diff);
   const s = ri(a, b); const ans = s * s;
   const distractors = [4 * s, 2 * s, s + s, s + 4];
-  return { topic: 'area', key: 'sq-a', prompt: `مساحت مربعی با ضلع ${fa(s)} سانتی‌متر؟`,
+  return { topic: 'area', key: 'sq-a', prompt: `مساحت مربعی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`,
     shape: Shapes.square(s), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
     steps: ['ضلع × ضلع', `${eq(`${fa(s)} × ${fa(s)}`)} = ${fa(ans)}`] };
 }
@@ -1449,7 +1612,7 @@ function genRectArea(diff) {
   const [a, b] = diffRange(diff);
   const w = ri(a, b), h = ri(a, b); const ans = w * h;
   const distractors = [2 * (w + h), w + h, w * h * 2, w + h + 2];
-  return { topic: 'area', key: 'rect-a', prompt: `مساحت مستطیلی به طول ${fa(w)} و عرض ${fa(h)}؟`,
+  return { topic: 'area', key: 'rect-a', prompt: `مساحت مستطیلی به طول ${fa(w)} و عرض ${fa(h)} چقدر است؟`,
     shape: Shapes.rectangle(w, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
     steps: ['طول × عرض', `${eq(`${fa(w)} × ${fa(h)}`)} = ${fa(ans)}`] };
 }
@@ -1461,17 +1624,32 @@ function genTriangleArea(diff) {
   if ((base * h) % 2 !== 0) h += 1;
   const ans = (base * h) / 2;
   const distractors = [base * h, base + h, base * h * 2, base + h + 2];
-  return { topic: 'area', key: 'tri-a', prompt: `مساحت مثلثی با قاعده ${fa(base)} و ارتفاع ${fa(h)}؟`,
-    shape: Shapes.triangleBH(base, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
+  /* ✅ انتخاب تصادفی بین سه نوع مثلث */
+  const variants = [
+    { type: 'bh', shape: Shapes.triangleBH(base, h), prompt: `مساحت مثلثی با قاعده ${fa(base)} و ارتفاع ${fa(h)} چقدر است؟` },
+    { type: 'iso', shape: ShapesAnim.areaIsoscelesTriangle(base, h), prompt: `مساحت مثلثی با قاعده ${fa(base)} و ارتفاع ${fa(h)} چقدر است؟` }
+  ];
+  if (diff !== 'easy') {
+    let x = base, y = h, z;
+    let guard = 0;
+    do { x = ri(a, b); y = ri(a, b); z = ri(a, b); guard++; }
+    while ((x+y<=z||x+z<=y||y+z<=x) && guard < 20);
+    if (guard < 20) {
+      variants.push({ type: 'scl', shape: ShapesAnim.areaScaleneTriangle(x, y, z), prompt: `مساحت مثلثی با اضلاع ${fa(x)}، ${fa(y)} و ${fa(z)} را حساب کن. (راهنمایی: قاعده و ارتفاع را از شکل بخوان)` });
+    }
+  }
+  const variant = pick(variants);
+  return { topic: 'area', key: 'tri-a', prompt: variant.prompt,
+    shape: variant.shape, type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
     steps: ['(قاعده × ارتفاع) ÷ ۲', `${eq(`(${fa(base)} × ${fa(h)}) ÷ ۲`)} = ${fa(ans)}`] };
 }
 genTriangleArea.levels = ['medium', 'hard'];
 
 function genCircleArea(diff) {
-  const r = ri(2, diff === 'hard' ? 6 : 5);
+  const r = ri(2, diff === 'hard' ? 5 : 4);
   const ans = round(3.14 * r * r, 2);
   const distractors = [round(2 * 3.14 * r, 2), round(3.14 * r, 2), r * r, round(3.14 * r * r * 2, 2)];
-  return { topic: 'area', key: 'circ-a', prompt: `مساحت دایره‌ای با شعاع ${fa(r)}؟ (π = ۳٫۱۴)`,
+  return { topic: 'area', key: 'circ-a', prompt: `مساحت دایره‌ای با شعاع ${fa(r)} چقدر است؟ (π = ۳٫۱۴)`,
     shape: Shapes.circle(r), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
     steps: ['π × شعاع × شعاع', `${eq(`۳٫۱۴ × ${fa(r)} × ${fa(r)}`)} = ${faDec(ans)}`] };
 }
@@ -1482,7 +1660,7 @@ function genParallelogramArea(diff) {
   const base = ri(a, b), h = ri(a, b); const ans = base * h;
   const distractors = [2 * (base + h), base + h, base * h * 2, base + h + 2];
   return { topic: 'area', key: 'para-a', prompt: `مساحت متوازی‌الاضلاع با قاعده ${fa(base)} و ارتفاع ${fa(h)}؟`,
-    shape: Shapes.parallelogram(base, 12, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
+    shape: Shapes.parallelogram(base, 8, h), type: 'numeric', answer: ans, unit: 'سانتی‌متر مربع', distractors,
     steps: ['قاعده × ارتفاع', `${eq(`${fa(base)} × ${fa(h)}`)} = ${fa(ans)}`] };
 }
 genParallelogramArea.levels = ['medium', 'hard'];
@@ -1527,7 +1705,7 @@ genHouseArea.levels = ['medium', 'hard'];
 
 function genParkArea(diff) {
   const [a, b] = diffRange(diff);
-  const W = ri(Math.max(6, a), Math.min(12, b)), H = ri(a, Math.min(6, b));
+  const W = ri(Math.max(6, a), Math.min(10, b)), H = ri(a, Math.min(5, b));
   const r = H / 2;
   const rectArea = W * H;
   const circleArea = round(3.14 * r * r, 2);
@@ -1539,24 +1717,7 @@ function genParkArea(diff) {
 }
 genParkArea.levels = ['hard'];
 
-function genHouseWithGardenArea(diff) {
-  const [a, b] = diffRange(diff);
-  const W = ri(Math.max(5, a), b), H = ri(a, Math.min(5, b));
-  let triH = ri(2, 4);
-  if ((W * triH) % 2 !== 0) triH += 1;
-  const r = ri(Math.max(2, Math.floor(W / 4)), Math.max(3, Math.floor(W / 3)));
-  const roofArea = (W * triH) / 2;
-  const houseArea = W * H;
-  const gardenArea = round(3.14 * r * r / 2, 2);
-  const ans = round(roofArea + houseArea + gardenArea, 2);
-  const distractors = [houseArea + roofArea, round(houseArea + gardenArea, 2), ans * 2, round(roofArea + gardenArea, 2)];
-  return { topic: 'area', key: 'comp-villa', prompt: `ویلا از سقف مثلثی + اتاق مستطیلی + باغچه نیم‌دایره. مساحت کل؟`,
-    shape: Shapes.houseWithGarden(W, H, triH, r), type: 'numeric', answer: ans, unit: 'متر مربع', distractors,
-    steps: [`سقف: ${fa(roofArea)}`, `اتاق: ${fa(houseArea)}`, `باغچه: ${faDec(gardenArea, 2)}`, `جمع ≈ ${faDec(ans, 2)}`] };
-}
-genHouseWithGardenArea.levels = ['hard'];
-
-/* ─── مساحت ترکیب‌های پیچیده (۷ ترکیب) ─── */
+/* ─── مساحت ترکیب‌ها (جمع مساحت اجزا) ─── */
 function makeCompositeAreaGen(key) {
   function gen(diff) {
     const comp = COMPOSITES[key];
@@ -1565,9 +1726,13 @@ function makeCompositeAreaGen(key) {
     const cellCount = compositeCellCount(comp);
     const distractors = [ans + cellSize * cellSize, ans - cellSize, cellCount * cellSize, ans * 2];
     const unit = 'سانتی‌متر مربع';
-    // ساخت steps از parts
-    const steps = ['شکل از چند بخش ساده ساخته شده.', ...comp.parts.map(p => `${p.label} → ${fa(p.count)} مربع`)];
-    steps.push(`مساحت کل = ${fa(cellCount)} × ${fa(cellSize)} × ${fa(cellSize)} = ${fa(ans)} ${unit}`);
+    /* ✅ ساخت steps با جمع مساحت اجزا — نه ضرب */
+    const partAreas = comp.parts.map(p => p.cells * cellSize * cellSize);
+    const steps = ['شکل از چند بخش ساده ساخته شده.'];
+    comp.parts.forEach((p, i) => {
+      steps.push(`${p.label} = ${fa(partAreas[i])}`);
+    });
+    steps.push(`مساحت کل = ${partAreas.map(a => fa(a)).join(' + ')} = ${fa(ans)} ${unit}`);
     return {
       topic: 'area',
       key: `comp-${key}-a`,
@@ -1587,23 +1752,23 @@ const compositeAreaGens = Object.keys(COMPOSITES).map(k => {
 
 /* ═════════ ۲۳) VOLUME GENERATORS ═════════ */
 function genCubeVolume(diff) {
-  const [a, b] = diffRange(diff);
-  const s = ri(a, Math.min(6, b)); const ans = s * s * s;
+  const [a, b] = diffVolumeRange(diff);
+  const s = ri(a, b); const ans = s * s * s;
   const distractors = [s * s, 6 * s * s, 3 * s, s * s * 2];
-  return { topic: 'volume', key: 'cube-v', prompt: `حجم مکعبی با ضلع ${fa(s)} سانتی‌متر؟`,
+  return { topic: 'volume', key: 'cube-v', prompt: `حجم مکعبی با ضلع ${fa(s)} سانتی‌متر چقدر است؟`,
     shape: Shapes.cube(s), type: 'numeric', answer: ans, unit: 'سانتی‌متر مکعب', distractors,
-    steps: ['ضلع × ضلع × ضلع', `${fa(ans)}`] };
+    steps: ['ضلع × ضلع × ضلع', `${eq(`${fa(s)} × ${fa(s)} × ${fa(s)}`)} = ${fa(ans)}`] };
 }
 genCubeVolume.levels = ['easy', 'medium', 'hard'];
 
 function genBoxVolume(diff) {
-  const [a, b] = diffRange(diff);
-  const w = ri(a, Math.min(6, b)), h = ri(a, Math.min(5, b)), d = ri(a, Math.min(5, b));
-  const ans = w * h * d;
-  const distractors = [w * h, w + h + d, 2 * (w + h + d), w * h * 2];
-  return { topic: 'volume', key: 'box-v', prompt: `حجم مکعب مستطیلی به طول ${fa(w)}، عرض ${fa(h)} و ارتفاع ${fa(d)}؟`,
-    shape: Shapes.box(w, h, d), type: 'numeric', answer: ans, unit: 'سانتی‌متر مکعب', distractors,
-    steps: ['طول × عرض × ارتفاع', `${eq(`${fa(w)} × ${fa(h)} × ${fa(d)}`)} = ${fa(ans)}`] };
+  const [a, b] = diffVolumeRange(diff);
+  const L = ri(a, b), W = ri(a, Math.max(a, b - 1)), H = ri(a, b);
+  const ans = L * W * H;
+  const distractors = [L * W, L + W + H, 2 * (L + W + H), L * W * 2];
+  return { topic: 'volume', key: 'box-v', prompt: `حجم مکعب مستطیلی به طول ${fa(L)}، عرض ${fa(W)} و ارتفاع ${fa(H)} چقدر است؟`,
+    shape: Shapes.box(L, W, H), type: 'numeric', answer: ans, unit: 'سانتی‌متر مکعب', distractors,
+    steps: ['طول × عرض × ارتفاع', `${eq(`${fa(L)} × ${fa(W)} × ${fa(H)}`)} = ${fa(ans)}`] };
 }
 genBoxVolume.levels = ['easy', 'medium', 'hard'];
 
@@ -1643,10 +1808,25 @@ function genFracAdd(diff) {
   const a = { n: n1, d: d1 }, b = { n: n2, d: d2 };
   const ans = fracAdd(a, b);
   const choices = makeFracChoices(ans, () => fracAdd({ n: ri(1, 5), d: ri(2, maxD) }, { n: ri(1, 5), d: ri(2, maxD) }));
-  const steps = sameDen
-    ? [`مخرج‌ها مساوی (${fa(d1)}).`, `${fa(n1)} + ${fa(n2)} = ${fa(n1+n2)}`, `${fracHTML(ans)}`]
-    : [`مخرج مشترک: ${fa(lcm(d1, d2))}`, `نتیجه: ${fracHTML(ans)}`];
-  return { topic: 'fractions', key: 'frac-add', prompt: 'حاصل جمع؟',
+  let steps;
+  if (sameDen) {
+    steps = [
+      `مخرج‌ها مساوی‌اند: ${fa(d1)}`,
+      `صورت‌ها را جمع می‌کنیم: ${eq(`${fa(n1)} + ${fa(n2)}`)} = ${fa(n1+n2)}`,
+      `نتیجه: ${fracHTML(ans)}`
+    ];
+  } else {
+    const L = lcm(d1, d2);
+    const k1 = L / d1, k2 = L / d2;
+    steps = [
+      `مخرج‌ها فرق دارند. ک.م.م (کوچک‌ترین مضرب مشترک) مخرج‌ها: ${fa(L)}`,
+      `${fracHTML(a)} = ${fracHTML({ n: n1 * k1, d: L })}`,
+      `${fracHTML(b)} = ${fracHTML({ n: n2 * k2, d: L })}`,
+      `حالا صورت‌ها را جمع می‌کنیم: ${eq(`${fa(n1*k1)} + ${fa(n2*k2)}`)} = ${fa(n1*k1 + n2*k2)}`,
+      `نتیجه: ${fracHTML(ans)}`
+    ];
+  }
+  return { topic: 'fractions', key: 'frac-add', prompt: 'حاصل جمع این دو کسر چقدر است؟',
     promptHTML: `<span dir="ltr">${fracHTML(a)} + ${fracHTML(b)} = ?</span>`,
     type: 'choice', choices, correct: ans, steps };
 }
@@ -1657,20 +1837,35 @@ function genFracSub(diff) {
   const maxD = diff === 'hard' ? 10 : 8;
   const d1 = sameDen ? ri(3, maxD) : ri(2, maxD);
   const d2 = sameDen ? d1 : ri(2, maxD);
-  const n1raw = ri(1, d1 - 1), n2raw = ri(1, d2 - 1);
+  let n1raw = ri(1, d1 - 1), n2raw = ri(1, d2 - 1);
   let a = { n: n1raw, d: d1 }, b = { n: n2raw, d: d2 };
-  // اطمینان از اینکه a > b (بزرگ‌تر اول بیاد)
   if (fracVal(a) < fracVal(b)) [a, b] = [b, a];
-  if (fracVal(a) === fracVal(b)) { a = { n: Math.min(d1-1, a.n + 1), d: a.d }; }
+  if (fracVal(a) === fracVal(b)) a = { n: Math.min(d1 - 1, a.n + 1), d: a.d };
   const ans = fracSub(a, b);
   const choices = makeFracChoices(ans, () => {
     const f1 = { n: ri(1, 5), d: ri(2, maxD) }, f2 = { n: ri(1, 5), d: ri(2, maxD) };
     return fracVal(f1) > fracVal(f2) ? fracSub(f1, f2) : fracSub(f2, f1);
   });
-  return { topic: 'fractions', key: 'frac-sub', prompt: 'حاصل تفریق؟',
+  let steps;
+  if (sameDen) {
+    steps = [
+      `مخرج‌ها مساوی‌اند: ${fa(a.d)}`,
+      `صورت‌ها را کم می‌کنیم: ${eq(`${fa(a.n)} − ${fa(b.n)}`)} = ${fa(a.n - b.n)}`,
+      `نتیجه: ${fracHTML(ans)}`
+    ];
+  } else {
+    const L = lcm(a.d, b.d);
+    const k1 = L / a.d, k2 = L / b.d;
+    steps = [
+      `مخرج‌ها فرق دارند. ک.م.م مخرج‌ها: ${fa(L)}`,
+      `${fracHTML(a)} = ${fracHTML({ n: a.n * k1, d: L })}`,
+      `${fracHTML(b)} = ${fracHTML({ n: b.n * k2, d: L })}`,
+      `تفریق: ${fracHTML(ans)}`
+    ];
+  }
+  return { topic: 'fractions', key: 'frac-sub', prompt: 'حاصل تفریق این دو کسر چقدر است؟',
     promptHTML: `<span dir="ltr">${fracHTML(a)} − ${fracHTML(b)} = ?</span>`,
-    type: 'choice', choices, correct: ans,
-    steps: [`مخرج مشترک: ${fa(lcm(a.d, b.d))}`, `نتیجه: ${fracHTML(ans)}`] };
+    type: 'choice', choices, correct: ans, steps };
 }
 genFracSub.levels = ['easy', 'medium', 'hard'];
 
@@ -1679,10 +1874,15 @@ function genFracMul(diff) {
   const a = { n: ri(1, 6), d: ri(2, maxD) }, b = { n: ri(1, 6), d: ri(2, maxD) };
   const ans = fracMul(a, b);
   const choices = makeFracChoices(ans, () => ({ n: ri(1, 10), d: ri(2, maxD) }));
-  return { topic: 'fractions', key: 'frac-mul', prompt: 'حاصل ضرب؟',
+  return { topic: 'fractions', key: 'frac-mul', prompt: 'حاصل ضرب این دو کسر چقدر است؟',
     promptHTML: `<span dir="ltr">${fracHTML(a)} × ${fracHTML(b)} = ?</span>`,
     type: 'choice', choices, correct: ans,
-    steps: ['صورت × صورت', 'مخرج × مخرج', `نتیجه: ${fracHTML(ans)}`] };
+    steps: [
+      'در ضرب، مخرج مشترک لازم نیست.',
+      `صورت × صورت: ${eq(`${fa(a.n)} × ${fa(b.n)}`)} = ${fa(a.n * b.n)}`,
+      `مخرج × مخرج: ${eq(`${fa(a.d)} × ${fa(b.d)}`)} = ${fa(a.d * b.d)}`,
+      `نتیجه: ${fracHTML(ans)}`
+    ] };
 }
 genFracMul.levels = ['medium', 'hard'];
 
@@ -1691,26 +1891,43 @@ function genFracDiv(diff) {
   const a = { n: ri(1, 6), d: ri(2, maxD) }, b = { n: ri(1, 6), d: ri(2, maxD) };
   const ans = fracDiv(a, b);
   const choices = makeFracChoices(ans, () => ({ n: ri(1, 10), d: ri(2, maxD) }));
-  return { topic: 'fractions', key: 'frac-div', prompt: 'حاصل تقسیم؟',
+  return { topic: 'fractions', key: 'frac-div', prompt: 'حاصل تقسیم این دو کسر چقدر است؟',
     promptHTML: `<span dir="ltr">${fracHTML(a)} ÷ ${fracHTML(b)} = ?</span>`,
     type: 'choice', choices, correct: ans,
-    steps: ['معکوس کن و ضرب', `نتیجه: ${fracHTML(ans)}`] };
+    steps: [
+      'برای تقسیم کسرها، کسر دوم را معکوس می‌کنیم و در کسر اول ضرب می‌کنیم.',
+      `معکوس ${fracHTML(b)} می‌شود ${fracHTML({ n: b.d, d: b.n })}`,
+      `${fracHTML(a)} × ${fracHTML({ n: b.d, d: b.n })} = ${fracHTML(ans)}`
+    ] };
 }
 genFracDiv.levels = ['hard'];
 
+/* ✅ آموزش کامل ساده‌کردن کسر */
 function genFracSimplify(diff) {
-  let a, ans, guard = 0;
+  let a, ans, g, guard = 0;
   do {
     const base = { n: ri(2, 6), d: ri(2, 8) };
     const k = diff === 'hard' ? ri(3, 5) : ri(2, 3);
     a = { n: base.n * k, d: base.d * k };
     ans = simplify(a.n, a.d);
+    g = gcd(a.n, a.d);
     guard++;
-  } while (ans.n === a.n && ans.d === a.d && guard < 20);
+  } while ((ans.n === a.n && ans.d === a.d || g < 2) && guard < 30);
+  if (g < 2) { a = { n: 4, d: 8 }; ans = { n: 1, d: 2 }; g = 4; }
   const choices = makeFracChoices(ans, () => ({ n: ri(2, 10), d: ri(2, 10) }));
-  return { topic: 'fractions', key: 'frac-simplify', prompt: 'این کسر را ساده کن:',
-    promptHTML: fracHTML(a), type: 'choice', choices, correct: ans,
-    steps: [`نتیجه: ${fracHTML(ans)}`] };
+  return {
+    topic: 'fractions', key: 'frac-simplify',
+    prompt: `این کسر را ساده کن. یعنی صورت و مخرج را بر بزرگ‌ترین مقسوم‌علیه مشترک (ب.م.م) تقسیم کن تا دیگر قابل ساده شدن نباشد:`,
+    promptHTML: `<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><div style="font-size:1.5rem;direction:ltr">${fracHTML(a)}</div><div style="font-size:.9rem;color:var(--muted)">صورت = ${fa(a.n)} — مخرج = ${fa(a.d)}</div></div>`,
+    type: 'choice', choices, correct: ans,
+    steps: [
+      `بزرگ‌ترین مقسوم‌علیه مشترک (ب.م.م) صورت و مخرج: ${fa(g)}`,
+      `صورت را تقسیم می‌کنیم: ${eq(`${fa(a.n)} ÷ ${fa(g)}`)} = ${fa(ans.n)}`,
+      `مخرج را تقسیم می‌کنیم: ${eq(`${fa(a.d)} ÷ ${fa(g)}`)} = ${fa(ans.d)}`,
+      `نتیجه: ${fracHTML(ans)}`,
+      `بررسی: آیا ${fracHTML(ans)} دوباره قابل ساده شدن است؟ ب.م.م ${fa(ans.n)} و ${fa(ans.d)} برابر ۱ است. پس ساده‌ترین شکل است.`
+    ]
+  };
 }
 genFracSimplify.levels = ['easy', 'medium', 'hard'];
 
@@ -1723,12 +1940,18 @@ function genFracCompare(diff) {
     guard++;
   } while (fracVal(a) === fracVal(b) && guard < 20);
   const correct = fracVal(a) > fracVal(b) ? '>' : '<';
+  const L = lcm(a.d, b.d);
   return { topic: 'fractions', key: 'frac-cmp', prompt: 'کدام علامت درست است؟',
     promptHTML: `<span dir="ltr">${fracHTML(a)} ? ${fracHTML(b)}</span>` + ShapesAnim.fracCompareBars(a.n, a.d, b.n, b.d),
     type: 'choice',
     choices: [{ n: '>', isSym: true }, { n: '<', isSym: true }, { n: '=', isSym: true }],
     correct: { n: correct, isSym: true },
-    steps: [`مخرج مشترک: ${fa(lcm(a.d, b.d))}`] };
+    steps: [
+      `مخرج مشترک: ک.م.م ${fa(a.d)} و ${fa(b.d)} = ${fa(L)}`,
+      `${fracHTML(a)} = ${fracHTML({ n: a.n * L / a.d, d: L })}`,
+      `${fracHTML(b)} = ${fracHTML({ n: b.n * L / b.d, d: L })}`,
+      `پس ${fracHTML(a)} ${correct === '>' ? '>' : '<'} ${fracHTML(b)}`
+    ] };
 }
 genFracCompare.levels = ['easy', 'medium', 'hard'];
 
@@ -1738,7 +1961,12 @@ function genMixedToImproper(diff) {
   const choices = makeFracChoices(imp, () => ({ n: ri(2, 30), d: ri(2, 8) }));
   return { topic: 'fractions', key: 'mixed-imp', prompt: 'این عدد مخلوط را به کسر تبدیل کن:',
     promptHTML: mixedHTML(imp), type: 'choice', choices, correct: imp,
-    steps: [`(${fa(whole)} × ${fa(d)}) + ${fa(n)} = ${fa(whole * d + n)}`] };
+    steps: [
+      `عدد مخلوط: ${fa(whole)} و ${fracHTML({ n, d })}`,
+      `عدد صحیح × مخرج: ${eq(`${fa(whole)} × ${fa(d)}`)} = ${fa(whole * d)}`,
+      `به اضافه صورت: ${eq(`${fa(whole * d)} + ${fa(n)}`)} = ${fa(whole * d + n)}`,
+      `کسر: ${fracHTML(imp)}`
+    ] };
 }
 genMixedToImproper.levels = ['medium', 'hard'];
 
@@ -1751,39 +1979,42 @@ function genWordFrac(diff) {
   return { topic: 'fractions', key: 'frac-word',
     prompt: `${ctx.name} ${fracHTML({ n, d })} از ${fa(total)} ${ctx.u} را ${ctx.verb}. ${ctx.q}`,
     type: 'numeric', answer: ans, unit: ctx.u, distractors,
-    steps: [`یک قسمت: ${fa(total / d)}`, `${fa(n)} قسمت: ${fa(ans)}`] };
+    steps: [
+      `یعنی باید ${fa(total)} را به ${fa(d)} قسمت تقسیم کنیم و ${fa(n)} قسمت برداریم.`,
+      `یک قسمت: ${eq(`${fa(total)} ÷ ${fa(d)}`)} = ${fa(total / d)}`,
+      `${fa(n)} قسمت: ${eq(`${fa(n)} × ${fa(total / d)}`)} = ${fa(ans)}`
+    ] };
 }
 genWordFrac.levels = ['hard'];
 
 /* ═════════ ۲۵) DECIMAL GENERATORS ═════════ */
 function genDecAdd(diff) {
-  const cfg = { easy: [1, 5, 1], medium: [2, 7, 1], hard: [3, 9, 2] };
+  const cfg = { easy: [1, 5, 1], medium: [2, 6, 1], hard: [3, 8, 2] };
   const [a, b, dec] = cfg[diff] || cfg.medium;
   const n1 = round(ri(a * 10, b * 10) / 10, dec);
   const n2 = round(ri(a * 10, b * 10) / 10, dec);
   const ans = round(n1 + n2, dec);
   const distractors = [round(ans / 2, dec), round(ans * 2, dec), round(ans + 1, dec), round(Math.abs(n1 - n2), dec)];
-  return { topic: 'decimals', key: 'dec-add', prompt: 'حاصل جمع؟',
-    promptHTML: eq(`${faDec(n1, dec)} + ${faDec(n2, dec)} = ?`),
+  return { topic: 'decimals', key: 'dec-add', prompt: `حاصل جمع ${faDec(n1, dec)} + ${faDec(n2, dec)} چقدر است؟`,
+    promptHTML: `<div style="text-align:center"><div style="font-size:1.3rem" dir="ltr">${faDec(n1, dec)} + ${faDec(n2, dec)} = ?</div></div>`,
     type: 'numeric', answer: ans, distractors,
-    steps: ['ممیزها تراز', `${faDec(ans, dec)}`] };
+    steps: ['ممیزها را زیر هم تراز می‌نویسیم.', `${eq(`${faDec(n1, dec)} + ${faDec(n2, dec)}`)} = ${faDec(ans, dec)}`] };
 }
 genDecAdd.levels = ['easy', 'medium', 'hard'];
 
 function genDecSub(diff) {
-  const cfg = { easy: [1, 5, 1], medium: [2, 7, 1], hard: [3, 9, 2] };
+  const cfg = { easy: [1, 5, 1], medium: [2, 6, 1], hard: [3, 8, 2] };
   const [a, b, dec] = cfg[diff] || cfg.medium;
   let n1 = round(ri(a * 10, b * 10) / 10, dec);
   let n2 = round(ri(a * 10, b * 10) / 10, dec);
-  // اطمینان از n1 > n2 (بزرگ‌تر اول)
   if (n1 < n2) [n1, n2] = [n2, n1];
   if (n1 === n2) n1 = round(n1 + 1, dec);
   const ans = round(n1 - n2, dec);
   const distractors = [round(n1 + n2, dec), round(ans / 2, dec), round(ans + 1, dec), round(n1, dec)];
-  return { topic: 'decimals', key: 'dec-sub', prompt: 'حاصل تفریق؟',
-    promptHTML: eq(`${faDec(n1, dec)} − ${faDec(n2, dec)} = ?`),
+  return { topic: 'decimals', key: 'dec-sub', prompt: `حاصل تفریق ${faDec(n1, dec)} − ${faDec(n2, dec)} چقدر است؟`,
+    promptHTML: `<div style="text-align:center"><div style="font-size:1.3rem" dir="ltr">${faDec(n1, dec)} − ${faDec(n2, dec)} = ?</div></div>`,
     type: 'numeric', answer: ans, distractors,
-    steps: ['ممیزها تراز', `${faDec(ans, dec)}`] };
+    steps: ['ممیزها را زیر هم تراز می‌نویسیم.', `${eq(`${faDec(n1, dec)} − ${faDec(n2, dec)}`)} = ${faDec(ans, dec)}`] };
 }
 genDecSub.levels = ['easy', 'medium', 'hard'];
 
@@ -1794,9 +2025,10 @@ function genDecMul(diff) {
   const whole = ri(2, 6);
   const ans = round(n1 * whole, dec);
   const distractors = [round(n1 + whole, dec), round(ans / 2, dec), round(ans * 2, dec), round(n1, dec)];
-  return { topic: 'decimals', key: 'dec-mul', prompt: 'حاصل ضرب؟',
-    promptHTML: eq(`${faDec(n1, dec)} × ${fa(whole)} = ?`),
-    type: 'numeric', answer: ans, distractors, steps: [`${faDec(ans, dec)}`] };
+  return { topic: 'decimals', key: 'dec-mul', prompt: `حاصل ضرب ${faDec(n1, dec)} در ${fa(whole)} چقدر است؟`,
+    promptHTML: `<div style="text-align:center"><div style="font-size:1.3rem" dir="ltr">${faDec(n1, dec)} × ${fa(whole)} = ?</div></div>`,
+    type: 'numeric', answer: ans, distractors,
+    steps: ['بدون ممیز ضرب می‌کنیم، بعد ممیز می‌گذاریم.', `${eq(`${faDec(n1, dec)} × ${fa(whole)}`)} = ${faDec(ans, dec)}`] };
 }
 genDecMul.levels = ['medium', 'hard'];
 
@@ -1805,9 +2037,10 @@ function genDecDiv(diff) {
   const ans = round(ri(5, 20) / 10, 1);
   const n1 = round(ans * whole, 1);
   const distractors = [round(ans * 2, 1), round(ans / 2, 1), round(n1, 1), round(ans + 1, 1)];
-  return { topic: 'decimals', key: 'dec-div', prompt: 'حاصل تقسیم؟',
-    promptHTML: eq(`${faDec(n1, 1)} ÷ ${fa(whole)} = ?`),
-    type: 'numeric', answer: ans, distractors, steps: [`${faDec(ans, 1)}`] };
+  return { topic: 'decimals', key: 'dec-div', prompt: `حاصل تقسیم ${faDec(n1, 1)} بر ${fa(whole)} چقدر است؟`,
+    promptHTML: `<div style="text-align:center"><div style="font-size:1.3rem" dir="ltr">${faDec(n1, 1)} ÷ ${fa(whole)} = ?</div></div>`,
+    type: 'numeric', answer: ans, distractors,
+    steps: [`${eq(`${faDec(n1, 1)} ÷ ${fa(whole)}`)} = ${faDec(ans, 1)}`] };
 }
 genDecDiv.levels = ['hard'];
 
@@ -1818,12 +2051,12 @@ function genDecCompare(diff) {
   let n2 = round(ri(1, max) / 10, dec);
   if (n1 === n2) n2 = round(n1 + 0.1, dec);
   const correct = n1 > n2 ? '>' : '<';
-  return { topic: 'decimals', key: 'dec-cmp', prompt: 'کدام علامت درست است؟',
-    promptHTML: eq(`${faDec(n1, dec)} ? ${faDec(n2, dec)}`) + ShapesAnim.decCompareBars(n1, n2),
+  return { topic: 'decimals', key: 'dec-cmp', prompt: `کدام علامت بین ${faDec(n1, dec)} و ${faDec(n2, dec)} درست است؟`,
+    promptHTML: `<div style="text-align:center"><div style="font-size:1.3rem" dir="ltr">${faDec(n1, dec)} ? ${faDec(n2, dec)}</div></div>` + ShapesAnim.decCompareBars(n1, n2),
     type: 'choice',
     choices: [{ n: '>', isSym: true }, { n: '<', isSym: true }, { n: '=', isSym: true }],
     correct: { n: correct, isSym: true },
-    steps: ['رقم به رقم از چپ'] };
+    steps: ['رقم به رقم از چپ مقایسه می‌کنیم.', `${eq(`${faDec(n1, dec)} ${correct === '>' ? '>' : '<'} ${faDec(n2, dec)}`)}`] };
 }
 genDecCompare.levels = ['easy', 'medium', 'hard'];
 
@@ -1838,9 +2071,12 @@ function genFracToDec(diff) {
     { n: String(f.v), isNum: true },
     ...wrong.map(o => ({ n: String(o.v), isNum: true }))
   ]);
-  return { topic: 'decimals', key: 'frac-dec', prompt: 'این کسر را به اعشار تبدیل کن:',
-    promptHTML: fracHTML(f), type: 'choice', choices, correct: { n: String(f.v), isNum: true },
-    steps: [`${faDec(f.v, 3)}`] };
+  return { topic: 'decimals', key: 'frac-dec', prompt: `کسر ${fracHTML(f)} را به اعشار تبدیل کن:`,
+    promptHTML: `<div style="text-align:center">${fracHTML(f)}</div>`,
+    type: 'choice', choices, correct: { n: String(f.v), isNum: true },
+    steps: [
+      `صورت را بر مخرج تقسیم می‌کنیم: ${eq(`${fa(f.n)} ÷ ${fa(f.d)}`)} = ${faDec(f.v, 3)}`
+    ] };
 }
 genFracToDec.levels = ['easy', 'medium', 'hard'];
 
@@ -1853,9 +2089,13 @@ function genDecToFrac(diff) {
   const f = pick(options);
   const wrong = shuffle(options.filter(o => o.v !== f.v)).slice(0, 3).map(o => ({ n: o.n, d: o.d }));
   const choices = shuffle([{ n: f.n, d: f.d }, ...wrong]);
-  return { topic: 'decimals', key: 'dec-frac', prompt: 'این اعشار را به کسر تبدیل کن:',
-    promptHTML: eq(faDec(f.v, 3)), type: 'choice', choices, correct: { n: f.n, d: f.d },
-    steps: [`${fracHTML({ n: f.n, d: f.d })}`] };
+  return { topic: 'decimals', key: 'dec-frac', prompt: `عدد اعشاری ${faDec(f.v, 3)} را به کسر تبدیل کن:`,
+    promptHTML: `<div style="text-align:center;font-size:1.3rem" dir="ltr">${faDec(f.v, 3)}</div>`,
+    type: 'choice', choices, correct: { n: f.n, d: f.d },
+    steps: [
+      `مخرج بر اساس تعداد ارقام بعد از ممیز: ${fa(f.v).split('.')[1] ? fa(f.v).split('.')[1].length + ' رقم' : '۱ رقم'}`,
+      `یعنی ${faDec(f.v, 3)} = ${fracHTML({ n: f.n, d: f.d })}`
+    ] };
 }
 genDecToFrac.levels = ['medium', 'hard'];
 
@@ -1865,21 +2105,29 @@ function genDecWord(diff) {
   const ans = round(whole * price, 1);
   const distractors = [round(ans / 2, 1), round(ans * 2, 1), round(price + whole, 1), round(price, 1)];
   return { topic: 'decimals', key: 'dec-word',
-    prompt: `قیمت یک دفتر ${faDec(price, 1)} هزار تومان. قیمت ${fa(whole)} دفتر؟`,
+    prompt: `قیمت یک دفتر ${faDec(price, 1)} هزار تومان است. قیمت ${fa(whole)} دفتر چقدر می‌شود؟`,
     type: 'numeric', answer: ans, unit: 'هزار تومان', distractors,
-    steps: [`${faDec(ans, 1)}`] };
+    steps: [
+      `${eq(`${faDec(price, 1)} × ${fa(whole)}`)} = ${faDec(ans, 1)}`
+    ] };
 }
 genDecWord.levels = ['hard'];
 
 function genDecOnLine(diff) {
-  const vals = diff === 'easy' ? [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9] : [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85];
+  const vals = diff === 'easy'
+    ? [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    : [0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85];
   const v = pick(vals);
   const wrongs = shuffle(vals.filter(x => x !== v)).slice(0, 3);
   const choices = shuffle([v, ...wrongs].map(x => ({ n: String(x), isNum: true })));
-  return { topic: 'decimals', key: 'dec-line', prompt: 'نشانگر روی محور چه عددی را نشان می‌دهد؟',
+  return { topic: 'decimals', key: 'dec-line',
+    prompt: `نشانگر روی محور اعداد چه عددی را نشان می‌دهد؟`,
     promptHTML: ShapesAnim.decimalLine([], v, 0, 1),
     type: 'choice', choices, correct: { n: String(v), isNum: true },
-    steps: [`${faDec(v, 2)}`] };
+    steps: [
+      `هر تقسیم کوچک بین ۰ و ۱ برابر یک‌دهم (۰٫۱) است.`,
+      `نشانگر روی ${faDec(v, 2)} قرار دارد.`
+    ] };
 }
 genDecOnLine.levels = ['easy', 'medium'];
 
@@ -1893,10 +2141,15 @@ function genDecAddOnLine(diff) {
     { n: String(round(Math.abs(a - b), 1)), isNum: true },
     { n: String(round(a + b - 0.1, 1)), isNum: true }
   ]);
-  return { topic: 'decimals', key: 'dec-line-add', prompt: 'از ۰ شروع کن، به اندازه a برو، سپس b. کجا می‌رسی؟',
+  return { topic: 'decimals', key: 'dec-line-add',
+    prompt: `روی محور اعداد، از صفر شروع کن، به اندازه ${faDec(a, 1)} جلو برو، سپس ${faDec(b, 1)} دیگر جلو برو. به چه عددی می‌رسی؟`,
     promptHTML: ShapesAnim.decimalAddOnLine(0, 1.2, a, b),
     type: 'choice', choices, correct: { n: String(ans), isNum: true },
-    steps: [`${faDec(a, 1)} + ${faDec(b, 1)} = ${faDec(ans, 1)}`] };
+    steps: [
+      `از ۰ شروع می‌کنیم و ${faDec(a, 1)} جلو می‌رویم.`,
+      `سپس ${faDec(b, 1)} دیگر جلو می‌رویم.`,
+      `نتیجه: ${faDec(a, 1)} + ${faDec(b, 1)} = ${faDec(ans, 1)}`
+    ] };
 }
 genDecAddOnLine.levels = ['medium', 'hard'];
 
@@ -1910,10 +2163,15 @@ function genDecSubOnLine(diff) {
     { n: String(round(a - b + 0.1, 1)), isNum: true },
     { n: String(round(a - b - 0.1, 1)), isNum: true }
   ]);
-  return { topic: 'decimals', key: 'dec-line-sub', prompt: `${faDec(a,1)} منهای ${faDec(b,1)}. کجا می‌رسی؟`,
+  return { topic: 'decimals', key: 'dec-line-sub',
+    prompt: `روی محور اعداد، از صفر تا ${faDec(a, 1)} جلو برو، سپس به اندازه ${faDec(b, 1)} به عقب برگرد. کجا می‌رسی؟`,
     promptHTML: ShapesAnim.decimalSubOnLine(0, 1, a, b),
     type: 'choice', choices, correct: { n: String(ans), isNum: true },
-    steps: [`${faDec(a, 1)} − ${faDec(b, 1)} = ${faDec(ans, 1)}`] };
+    steps: [
+      `از ۰ شروع می‌کنیم و ${faDec(a, 1)} جلو می‌رویم.`,
+      `سپس ${faDec(b, 1)} به عقب برمی‌گردیم.`,
+      `نتیجه: ${faDec(a, 1)} − ${faDec(b, 1)} = ${faDec(ans, 1)}`
+    ] };
 }
 genDecSubOnLine.levels = ['medium', 'hard'];
 
@@ -1929,7 +2187,7 @@ const Generators = {
   area: [
     genSquareArea, genRectArea, genTriangleArea, genCircleArea,
     genParallelogramArea, genRhombusArea, genTrapezoidArea,
-    genHouseArea, genParkArea, genHouseWithGardenArea,
+    genHouseArea, genParkArea,
     ...compositeAreaGens
   ],
   volume: [genCubeVolume, genBoxVolume, genFindEdgeFromVolume],
@@ -1948,7 +2206,6 @@ function generateQuestion(topic, difficulty) {
   if (!pool.length) return null;
   return numericToChoice(pick(pool)(difficulty));
 }
-
 /* ═════════ ۲۷) GAMIFICATION ═════════ */
 const BADGES = [
   { id: 'first', emoji: '🎯', name: 'اولین قدم', desc: 'اولین پاسخ درست' },
@@ -2110,13 +2367,13 @@ function viewAddStudent() {
   return `${header('➕ دانش‌آموز جدید', true)}
   <div class="card">
     <label style="display:block;margin-bottom:14px"><span>نام:</span>
-      <input type="text" id="stuName" class="num-input" style="text-align:right;font-weight:400" placeholder="مثلاً علی" maxlength="20">
+      <input type="text" id="stuName" class="num-input" style="text-align:right;font-weight:400;margin-top:6px" placeholder="مثلاً علی" maxlength="20">
     </label>
     <label style="display:block;margin-bottom:14px"><span>نام خانوادگی (اختیاری):</span>
-      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-weight:400" placeholder="مثلاً نوری" maxlength="20">
+      <input type="text" id="stuFamily" class="num-input" style="text-align:right;font-weight:400;margin-top:6px" placeholder="مثلاً نوری" maxlength="20">
     </label>
     <label style="display:block"><span>پایه:</span>
-      <select id="stuGrade" class="num-input" style="text-align:right">
+      <select id="stuGrade" class="num-input" style="text-align:right;margin-top:6px">
         ${[4, 5, 6, 7, 8, 9].map(g => `<option value="${g}" ${g === 4 ? 'selected' : ''}>پایه ${fa(g)}</option>`).join('')}
       </select>
     </label>
@@ -2129,7 +2386,7 @@ function viewAddStudent() {
 function viewHome() {
   const daily = dailyAvailable();
   return `${header('ریاضی‌یار 🎓')}
-  ${daily ? `<div class="daily-card"><h3>🌅 چالش روزانه</h3><p>پاداش دوبرابر!</p>
+  ${daily ? `<div class="daily-card"><h3>🌅 چالش روزانه</h3><p>یک سوال ویژه با پاداش دوبرابر!</p>
     <button class="daily-btn" onclick="window.__startDaily()">شروع چالش</button></div>` :
     `<div class="card" style="text-align:center;background:var(--feedback-good-bg);border-right:4px solid var(--success)">
       <p style="margin:0;color:var(--success);font-weight:700">✅ چالش امروز انجام شد!</p></div>`}
@@ -2137,14 +2394,14 @@ function viewHome() {
   <div class="grid grid-2">
     <button class="card card-btn" onclick="window.__nav('perimeter')"><span class="icon-big">📏</span><h3 class="card-title">محیط</h3><p class="card-desc">دور شکل‌ها</p></button>
     <button class="card card-btn" onclick="window.__nav('area')"><span class="icon-big">📐</span><h3 class="card-title">مساحت</h3><p class="card-desc">سطح شکل‌ها</p></button>
-    <button class="card card-btn" onclick="window.__nav('volume')"><span class="icon-big">🧊</span><h3 class="card-title">حجم</h3><p class="card-desc">۳بعدی</p></button>
+    <button class="card card-btn" onclick="window.__nav('volume')"><span class="icon-big">🧊</span><h3 class="card-title">حجم</h3><p class="card-desc">شکل‌های ۳بعدی</p></button>
     <button class="card card-btn" onclick="window.__nav('fractions')"><span class="icon-big">🍰</span><h3 class="card-title">کسرها</h3><p class="card-desc">قسمت‌های کل</p></button>
     <button class="card card-btn" onclick="window.__nav('decimals')"><span class="icon-big">🔢</span><h3 class="card-title">اعشاری</h3><p class="card-desc">با ممیز</p></button>
-    <button class="card card-btn" onclick="window.__nav('progress')"><span class="icon-big">📊</span><h3 class="card-title">پیشرفت</h3><p class="card-desc">نمودار</p></button>
+    <button class="card card-btn" onclick="window.__nav('progress')"><span class="icon-big">📊</span><h3 class="card-title">پیشرفت من</h3><p class="card-desc">نمودار یادگیری</p></button>
   </div>
   <div style="margin-top:14px">
     <button class="card card-btn" style="width:100%;text-align:center;background:var(--hint-bg);border:2px solid var(--primary-l)" onclick="window.__nav('multiExamSetup')">
-      <span class="icon-big">🎯</span><h3 class="card-title" style="justify-content:center">آزمون جامع</h3><p class="card-desc">از چند درس</p>
+      <span class="icon-big">🎯</span><h3 class="card-title" style="justify-content:center">آزمون جامع</h3><p class="card-desc">از چند درس مختلف</p>
     </button>
   </div>
   ${bottomNav()}`;
@@ -2162,9 +2419,9 @@ function viewProfile() {
     <h3 class="card-title">🏆 دستاوردها</h3>
     <div class="stats-row">
       <div class="stat-item"><div class="stat-value">${fa(s.stats.level)}</div><div class="stat-label">سطح</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(s.stats.coins)}</div><div class="stat-label">🪙</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(s.stats.stars)}</div><div class="stat-label">⭐</div></div>
-      <div class="stat-item"><div class="stat-value">${fa(s.stats.bestStreak)}</div><div class="stat-label">🔥</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.coins)}</div><div class="stat-label">🪙 سکه</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.stars)}</div><div class="stat-label">⭐ ستاره</div></div>
+      <div class="stat-item"><div class="stat-value">${fa(s.stats.bestStreak)}</div><div class="stat-label">🔥 رکورد</div></div>
     </div>
   </div>
   <div class="card">
@@ -2179,6 +2436,7 @@ function viewProfile() {
   </div>
   <div class="card" style="text-align:center;margin-top:14px">
     <p style="color:var(--muted);font-size:.85rem;margin:0 0 10px">ساخته شده با ❤️ توسط <strong style="direction:ltr">maysam261</strong></p>
+    <p style="margin:0 0 12px"><span class="version-badge">v${APP_VERSION}</span></p>
     <button class="btn info full" onclick="window.__nav('contact')">📞 ارتباط</button>
   </div>
   ${bottomNav()}`;
@@ -2187,10 +2445,10 @@ function viewTopic(topic) {
   const titles = { perimeter: '📏 محیط', area: '📐 مساحت', volume: '🧊 حجم', fractions: '🍰 کسرها', decimals: '🔢 اعداد اعشاری' };
   return `${header(titles[topic], true)}
   <div class="grid grid-2">
-    <button class="card card-btn" onclick="window.__nav('learn', {topic:'${topic}'})"><span class="icon-big">📚</span><h3 class="card-title">آموزش</h3></button>
-    <button class="card card-btn" onclick="window.__nav('practice', {topic:'${topic}'})"><span class="icon-big">✏️</span><h3 class="card-title">تمرین</h3></button>
-    <button class="card card-btn" onclick="window.__nav('examSetup', {topic:'${topic}'})"><span class="icon-big">🎯</span><h3 class="card-title">آزمون</h3></button>
-    <button class="card card-btn" onclick="window.__nav('progress')"><span class="icon-big">📊</span><h3 class="card-title">پیشرفت</h3></button>
+    <button class="card card-btn" onclick="window.__nav('learn', {topic:'${topic}'})"><span class="icon-big">📚</span><h3 class="card-title">آموزش</h3><p class="card-desc">با انیمیشن و مثال</p></button>
+    <button class="card card-btn" onclick="window.__nav('practice', {topic:'${topic}'})"><span class="icon-big">✏️</span><h3 class="card-title">تمرین</h3><p class="card-desc">سوال‌های چهارگزینه‌ای</p></button>
+    <button class="card card-btn" onclick="window.__nav('examSetup', {topic:'${topic}'})"><span class="icon-big">🎯</span><h3 class="card-title">آزمون</h3><p class="card-desc">با کارنامه</p></button>
+    <button class="card card-btn" onclick="window.__nav('progress')"><span class="icon-big">📊</span><h3 class="card-title">پیشرفت</h3><p class="card-desc">درصد یادگیری</p></button>
   </div>
   ${bottomNav()}`;
 }
@@ -2215,11 +2473,13 @@ function viewContact() {
     <div style="font-size:3.5rem">👨‍💻</div>
     <h2 style="margin:8px 0;direction:ltr">maysam261</h2>
     <p style="color:var(--muted)">تهیه‌کننده ریاضی‌یار</p>
+    <p style="margin:8px 0 0"><span class="version-badge">v${APP_VERSION}</span></p>
   </div>
-  <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:20px 0">
+  <p style="color:var(--muted);margin:20px 0 14px;text-align:center;font-size:.9rem">برای ارتباط، روی لوگوی پیام‌رسان مورد نظر بزن:</p>
+  <div style="display:flex;justify-content:center;gap:24px;flex-wrap:wrap;padding:10px 0">
     ${CONTACT_LINKS.map(link => `
       <a href="${link.url}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;flex-direction:column;align-items:center;gap:8px;text-decoration:none;color:inherit">
-        ${brandLogo({ src: link.src, alt: link.name, fallbackEmoji: link.emoji, bgColor: link.bg })}
+        ${brandLogo({ src: link.src, alt: 'لوگوی ' + link.name, fallbackEmoji: link.emoji, bgColor: link.bg })}
         <span style="font-size:.85rem;font-weight:600;color:var(--primary-d)">${link.name}</span>
       </a>`).join('')}
   </div>
@@ -2227,192 +2487,478 @@ function viewContact() {
 }
 
 /* ═════════ ۳۵) LESSONS ═════════ */
-/* ⚠️ نکته: مثال‌های ریاضی فقط html دارند (بدون text) تا نمایش دوگانه نداشته باشیم */
+/* ⚠️ هر مثال فقط یک نمایشگر دارد (html یا shape). متن سوال جدا از تصویر است. */
 const LESSONS = {
   perimeter: [
-    { id: 'sq', title: 'مربع', emoji: '⬛', formula: 'محیط = ۴ × ضلع',
-      paragraphs: ['مربع ۴ ضلع مساوی دارد.', 'محیط یعنی دور تا دور شکل.'],
-      examples: [
-        { html: ShapesAnim.tracingSquare(3), steps: ['۴ × ۳ = ۱۲'], answer: '۱۲ سانتی‌متر' },
-        { html: ShapesAnim.tracingSquare(6), steps: ['۴ × ۶ = ۲۴'], answer: '۲۴ متر' }
+    {
+      id: 'sq', title: 'مربع', emoji: '⬛', formula: 'محیط = ۴ × ضلع',
+      paragraphs: [
+        'مربع ۴ ضلع مساوی دارد و همه زوایایش قائمه است.',
+        'محیط یعنی «دور تا دور» شکل.',
+        'چون هر چهار ضلع مساوی‌اند، کافیست یک ضلع را در ۴ ضرب کنیم.'
       ],
-      tips: ['محیط یعنی دور تا دور.'], pitfalls: ['مساحت = ضلع × ضلع.'] },
-    { id: 'rect', title: 'مستطیل', emoji: '▭', formula: 'محیط = ۲ × (طول + عرض)',
-      paragraphs: ['اضلاع روبه‌رو مساوی.'],
       examples: [
-        { html: ShapesAnim.tracingRect(5, 3), steps: ['۲ × (۵ + ۳) = ۱۶'], answer: '۱۶ سانتی‌متر' }
-      ], tips: ['اضلاع روبه‌رو مساوی.'], pitfalls: ['اول جمع، بعد ضرب.'] },
-    { id: 'tri', title: 'مثلث', emoji: '🔺', formula: 'محیط = جمع سه ضلع',
-      paragraphs: ['مثلث ۳ ضلع دارد.'],
+        { text: 'یک کاشی مربعی با ضلع ۳ سانتی‌متر. دور تا دورش چقدر است؟',
+          shape: ShapesAnim.tracingSquare(3),
+          steps: ['مربع ۴ ضلع مساوی دارد.', 'محیط = ۴ × ضلع', '۴ × ۳ = ۱۲'], answer: '۱۲ سانتی‌متر' },
+        { text: 'زمین بازی مربعی با ضلع ۶ متر. یک دور کامل چند متر است؟',
+          shape: ShapesAnim.tracingSquare(6),
+          steps: ['۴ × ۶ = ۲۴'], answer: '۲۴ متر' }
+      ],
+      tips: ['محیط یعنی دور تا دور.', 'همیشه واحد را بنویس.'],
+      pitfalls: ['مساحت = ضلع × ضلع، محیط = ۴ × ضلع.']
+    },
+    {
+      id: 'rect', title: 'مستطیل', emoji: '▭', formula: 'محیط = ۲ × (طول + عرض)',
+      paragraphs: ['مستطیل ۴ ضلع دارد، ولی فقط اضلاع روبه‌رو مساوی‌اند.', 'برای محیط، اول طول و عرض را جمع می‌کنیم، بعد در ۲ ضرب.'],
       examples: [
-        { html: ShapesAnim.tracingTriangle(3, 4, 5), steps: ['۳ + ۴ + ۵ = ۱۲'], answer: '۱۲ سانتی‌متر' }
-      ], tips: ['جمع سه ضلع.'], pitfalls: ['همه اضلاع مساوی نیستند.'] },
-    { id: 'circ', title: 'دایره', emoji: '⚪', formula: 'محیط = ۲ × π × شعاع',
-      paragraphs: ['π ≈ ۳٫۱۴.'],
+        { text: 'دفتری با طول ۵ و عرض ۳ سانتی‌متر. دور تا دورش چقدر است؟',
+          shape: ShapesAnim.tracingRect(5, 3),
+          steps: ['۵ + ۳ = ۸', '۲ × ۸ = ۱۶'], answer: '۱۶ سانتی‌متر' }
+      ],
+      tips: ['اضلاع روبه‌رو مساوی‌اند.'],
+      pitfalls: ['اول جمع، بعد ضرب در ۲.']
+    },
+    {
+      id: 'tri', title: 'مثلث', emoji: '🔺', formula: 'محیط = ضلع۱ + ضلع۲ + ضلع۳',
+      paragraphs: ['مثلث ۳ ضلع دارد.', 'برای محیط، سه ضلع را با هم جمع می‌کنیم.'],
       examples: [
-        { html: ShapesAnim.circlePerimeterAnim(2), steps: ['۲ × ۳٫۱۴ × ۲ = ۱۲٫۵۶'], answer: '۱۲٫۵۶ سانتی‌متر' }
-      ], tips: ['قطر = ۲ × شعاع.'], pitfalls: ['اگر قطر داری، بر ۲ تقسیم کن.'] },
-    { id: 'comp', title: 'شکل‌های ترکیبی', emoji: '🚀', formula: 'محیط = جمع ضلع‌های بیرونی',
+        { text: 'مثلثی با اضلاع ۳، ۴ و ۵ سانتی‌متر. محیطش چقدر است؟',
+          shape: ShapesAnim.tracingTriangle(3, 4, 5),
+          steps: ['۳ + ۴ + ۵ = ۱۲'], answer: '۱۲ سانتی‌متر' }
+      ],
+      tips: ['مجموع دو ضلع کوچک باید بزرگ‌تر از ضلع بزرگ باشد.'],
+      pitfalls: ['نیازی نیست همه اضلاع مساوی باشند.']
+    },
+    {
+      id: 'circ', title: 'دایره', emoji: '⚪', formula: 'محیط = ۲ × π × شعاع',
+      paragraphs: ['دایره یک شکل گرد است.', 'شعاع = فاصله‌ی مرکز تا لبه. π ≈ ۳٫۱۴.'],
+      examples: [
+        { text: 'دایره‌ای با شعاع ۲ سانتی‌متر. دور تا دورش چقدر است؟',
+          shape: ShapesAnim.circlePerimeterAnim(2),
+          steps: ['۲ × ۳٫۱۴ × ۲ = ۱۲٫۵۶'], answer: '۱۲٫۵۶ سانتی‌متر' }
+      ],
+      tips: ['قطر = ۲ × شعاع.'],
+      pitfalls: ['اگر قطر داری، اول بر ۲ تقسیم کن.']
+    },
+    {
+      id: 'para', title: 'متوازی‌الاضلاع', emoji: '▱', formula: 'محیط = ۲ × (a + b)',
+      paragraphs: ['اضلاع روبه‌رو مساوی و موازی‌اند.'],
+      examples: [
+        { text: 'متوازی‌الاضلاعی با اضلاع ۴ و ۶ متر. محیطش چقدر است؟',
+          shape: ShapesAnim.perimeterParallelogram(4, 6),
+          steps: ['۲ × (۴ + ۶) = ۲۰'], answer: '۲۰ متر' }
+      ],
+      tips: ['دو جفت ضلع مساوی.'],
+      pitfalls: ['ارتفاع ≠ ضلع کج.']
+    },
+    {
+      id: 'rhom', title: 'لوزی', emoji: '◆', formula: 'محیط = ۴ × ضلع',
+      paragraphs: ['لوزی همه اضلاعش مساوی است.'],
+      examples: [
+        { text: 'لوزی با ضلع ۴ سانتی‌متر. محیطش چقدر است؟',
+          shape: ShapesAnim.perimeterRhombus(4),
+          steps: ['۴ × ۴ = ۱۶'], answer: '۱۶ سانتی‌متر' }
+      ],
+      tips: ['مانند مربع محاسبه می‌شود.'],
+      pitfalls: ['قطرها محیط نیستند.']
+    },
+    {
+      id: 'poly', title: 'چندضلعی منتظم', emoji: '⬟', formula: 'محیط = تعداد ضلع × ضلع',
+      paragraphs: ['همه‌ی ضلع‌ها و زوایا مساوی.'],
+      examples: [
+        { text: 'شش‌ضلعی منتظم با ضلع ۳ سانتی‌متر. محیطش چقدر است؟',
+          shape: ShapesAnim.perimeterPolygon(6, 3),
+          steps: ['۶ × ۳ = ۱۸'], answer: '۱۸ سانتی‌متر' }
+      ],
+      tips: ['تعداد ضلع را از نام شکل بخوان.'],
+      pitfalls: ['تعداد ضلع را فراموش نکن.']
+    },
+    {
+      id: 'comp', title: 'شکل‌های ترکیبی', emoji: '🚀', formula: 'محیط = جمع ضلع‌های بیرونی',
       paragraphs: ['یک شکل می‌تواند از چند شکل ساده ساخته شود.', 'برای محیط، فقط ضلع‌های بیرونی را جمع می‌کنیم.'],
       examples: [
-        { html: ShapesAnim.compositePerimeter('rocket', 14), steps: ['اضلاع بیرونی را می‌شماریم.'], answer: 'محیط کل' },
-        { html: ShapesAnim.compositePerimeter('robot', 12), steps: ['خط دور شکل'], answer: 'محیط کل' }
+        { text: 'این شکل موشک از چند مربع ساخته شده. دور تا دورش را حساب کن.',
+          shape: ShapesAnim.compositePerimeter('rocket', 16),
+          steps: ['اضلاع بیرونی را می‌شماریم.'], answer: 'محیط = مجموع ضلع‌های بیرونی' },
+        { text: 'این شکل ربات. دور تا دورش چقدر است؟',
+          shape: ShapesAnim.compositePerimeter('robot', 14),
+          steps: ['خط بیرونی شکل را دنبال می‌کنیم.'], answer: 'محیط = مجموع ضلع‌های بیرونی' }
       ],
-      tips: ['فقط خط بیرونی.'], pitfalls: ['اضلاع داخلی را نشمار.'] }
+      tips: ['فقط خط بیرونی را بشمار.'], pitfalls: ['اضلاع داخلی را نشمار.']
+    }
   ],
   area: [
-    { id: 'sq', title: 'مربع', emoji: '⬛', formula: 'مساحت = ضلع × ضلع',
-      paragraphs: ['مساحت = سطح داخل شکل.'],
+    {
+      id: 'sq', title: 'مربع', emoji: '⬛', formula: 'مساحت = ضلع × ضلع',
+      paragraphs: ['مساحت یعنی چقدر سطح داخل شکل جا می‌شود.'],
       examples: [
-        { html: ShapesAnim.areaSquare(3), steps: ['۳ × ۳ = ۹'], answer: '۹ سانتی‌متر مربع' },
-        { html: ShapesAnim.unitSquaresSquare(4), steps: ['۴ × ۴ = ۱۶ مربع'], answer: '۱۶ متر مربع' }
-      ], tips: ['واحد مربع.'], pitfalls: ['اشتباه با محیط.'] },
-    { id: 'rect', title: 'مستطیل', emoji: '▭', formula: 'مساحت = طول × عرض',
-      paragraphs: ['طول × عرض.'],
+        { text: 'کاشی مربعی با ضلع ۳ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaSquare(3),
+          steps: ['روی شکل بزن تا سطحش رنگ شود.', '۳ × ۳ = ۹'], answer: '۹ سانتی‌متر مربع' },
+        { text: 'اتاقی مربعی با ضلع ۴ متر. اگر بخواهیم کف آن را با مربع‌های ۱×۱ فرش کنیم، چند مربع لازم است؟',
+          shape: ShapesAnim.unitSquaresSquare(4),
+          steps: ['روی شکل بزن تا مربع‌ها یکی‌یکی ظاهر شوند.', '۴ × ۴ = ۱۶ مربع'], answer: '۱۶ متر مربع' }
+      ],
+      tips: ['واحد مساحت همیشه «مربع» دارد.'],
+      pitfalls: ['مساحت را با محیط اشتباه نگیر.']
+    },
+    {
+      id: 'rect', title: 'مستطیل', emoji: '▭', formula: 'مساحت = طول × عرض',
+      paragraphs: ['مساحت مستطیل = طول × عرض.'],
       examples: [
-        { html: ShapesAnim.areaRectangle(5, 3), steps: ['۵ × ۳ = ۱۵'], answer: '۱۵ سانتی‌متر مربع' },
-        { html: ShapesAnim.unitSquaresRect(4, 3), steps: ['۴ × ۳ = ۱۲'], answer: '۱۲ متر مربع' }
-      ], tips: ['ترتیب مهم نیست.'], pitfalls: ['جمع نکن؛ ضرب کن.'] },
-    { id: 'tri', title: 'مثلث', emoji: '🔺', formula: 'مساحت = (قاعده × ارتفاع) ÷ ۲',
-      paragraphs: ['مثلث نصف مستطیل احاطه‌کننده است.'],
+        { text: 'دفتری با طول ۵ و عرض ۳ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaRectangle(5, 3),
+          steps: ['روی شکل بزن تا سطحش رنگ شود.', '۵ × ۳ = ۱۵'], answer: '۱۵ سانتی‌متر مربع' },
+        { text: 'باغچه‌ای ۴×۳ متر. اگر بخواهیم کف آن را با مربع‌های ۱×۱ بچینیم، چند مربع لازم است؟',
+          shape: ShapesAnim.unitSquaresRect(4, 3),
+          steps: ['روی شکل بزن تا مربع‌ها ظاهر شوند.', '۴ × ۳ = ۱۲ مربع'], answer: '۱۲ متر مربع' }
+      ],
+      tips: ['ترتیب ضرب مهم نیست.'],
+      pitfalls: ['جمع نکن؛ ضرب کن.']
+    },
+    {
+      id: 'tri', title: 'مثلث', emoji: '🔺', formula: 'مساحت = (قاعده × ارتفاع) ÷ ۲',
+      paragraphs: ['مساحت مثلث نصف مستطیل احاطه‌کننده است.', 'روی شکل بزن تا ارتفاع، سپس قاعده، سپس زاویه قائمه رسم شود.'],
       examples: [
-        { html: ShapesAnim.areaTriangle(4, 3), steps: ['(۴ × ۳) ÷ ۲ = ۶'], answer: '۶ سانتی‌متر مربع' }
-      ], tips: ['ارتفاع عمود بر قاعده.'], pitfalls: ['فراموش نکن ÷ ۲.'] },
-    { id: 'circ', title: 'دایره', emoji: '⚪', formula: 'مساحت = π × شعاع × شعاع',
-      paragraphs: ['π ≈ ۳٫۱۴.'],
+        { text: 'مثلثی با قاعده ۴ و ارتفاع ۳ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaTriangle(4, 3),
+          steps: ['اول ارتفاع رسم می‌شود، بعد قاعده، بعد زاویه قائمه.', '(۴ × ۳) ÷ ۲ = ۶'], answer: '۶ سانتی‌متر مربع' },
+        { text: 'مثلث قائم‌الزاویه با دو ضلع قائمه‌ی ۳ و ۵. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaRightTriangle(5, 3),
+          steps: ['در مثلث قائم‌الزاویه، دو ضلع قائمه همان قاعده و ارتفاع هستند.', '(۵ × ۳) ÷ ۲ = ۷٫۵'], answer: '۷٫۵ سانتی‌متر مربع' }
+      ],
+      tips: ['ارتفاع همیشه عمود بر قاعده است.'],
+      pitfalls: ['فراموش نکن بر ۲ تقسیم کنی.']
+    },
+    {
+      id: 'circ', title: 'دایره', emoji: '⚪', formula: 'مساحت = π × شعاع × شعاع',
+      paragraphs: ['π ≈ ۳٫۱۴.', 'دقت کن: شعاع × شعاع، نه ۲ × شعاع.'],
       examples: [
-        { html: ShapesAnim.areaCircle(2), steps: ['۳٫۱۴ × ۴ = ۱۲٫۵۶'], answer: '۱۲٫۵۶ سانتی‌متر مربع' }
-      ], tips: ['π = ۳٫۱۴.'], pitfalls: ['شعاع² ≠ ۲ × شعاع.'] },
-    { id: 'para', title: 'متوازی‌الاضلاع', emoji: '▱', formula: 'مساحت = قاعده × ارتفاع',
-      paragraphs: ['مانند مستطیل.'],
+        { text: 'دایره‌ای با شعاع ۲ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaCircle(2),
+          steps: ['۳٫۱۴ × ۲ × ۲ = ۱۲٫۵۶'], answer: '۱۲٫۵۶ سانتی‌متر مربع' }
+      ],
+      tips: ['π = ۳٫۱۴.'], pitfalls: ['شعاع به توان ۲ ≠ ۲ × شعاع.']
+    },
+    {
+      id: 'para', title: 'متوازی‌الاضلاع', emoji: '▱', formula: 'مساحت = قاعده × ارتفاع',
+      paragraphs: ['مانند مستطیل، قاعده × ارتفاع.'],
       examples: [
-        { html: ShapesAnim.areaParallelogram(5, 3), steps: ['۵ × ۳ = ۱۵'], answer: '۱۵ سانتی‌متر مربع' }
-      ], tips: ['قاعده × ارتفاع.'], pitfalls: ['ارتفاع عمود بر قاعده.'] },
-    { id: 'rhom', title: 'لوزی', emoji: '◆', formula: 'مساحت = (قطر۱ × قطر۲) ÷ ۲',
-      paragraphs: ['قطرها عمود بر هم.'],
+        { text: 'متوازی‌الاضلاعی با قاعده ۵ و ارتفاع ۳ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaParallelogram(5, 3),
+          steps: ['۵ × ۳ = ۱۵'], answer: '۱۵ سانتی‌متر مربع' }
+      ],
+      tips: ['برای مساحت، فقط قاعده و ارتفاع.'],
+      pitfalls: ['ارتفاع عمود بر قاعده است، نه ضلع کج.']
+    },
+    {
+      id: 'rhom', title: 'لوزی', emoji: '◆', formula: 'مساحت = (قطر۱ × قطر۲) ÷ ۲',
+      paragraphs: ['لوزی همه اضلاعش مساوی است. دو قطرش عمود بر هم‌اند.'],
       examples: [
-        { html: ShapesAnim.areaRhombus(4, 6), steps: ['(۴ × ۶) ÷ ۲ = ۱۲'], answer: '۱۲ سانتی‌متر مربع' }
-      ], tips: ['÷ ۲ را فراموش نکن.'], pitfalls: ['فراموش ÷ ۲.'] },
-    { id: 'trap', title: 'ذوزنقه', emoji: '⏢', formula: 'مساحت = ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲',
-      paragraphs: ['دو ضلع موازی.'],
+        { text: 'لوزی با قطرهای ۴ و ۶ سانتی‌متر. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaRhombus(4, 6),
+          steps: ['(۴ × ۶) ÷ ۲ = ۱۲'], answer: '۱۲ سانتی‌متر مربع' }
+      ],
+      tips: ['یادت باشد بر ۲ تقسیم کنی.'],
+      pitfalls: ['فراموش نکن ÷ ۲.']
+    },
+    {
+      id: 'trap', title: 'ذوزنقه', emoji: '⏢', formula: 'مساحت = ((قاعده کوچک + قاعده بزرگ) × ارتفاع) ÷ ۲',
+      paragraphs: ['دو ضلع موازی به نام قاعده‌ها.'],
       examples: [
-        { html: ShapesAnim.areaTrapezoid(5, 3, 4), steps: ['((۳ + ۵) × ۴) ÷ ۲ = ۱۶'], answer: '۱۶ سانتی‌متر مربع' }
-      ], tips: ['دو قاعده را جمع کن.'], pitfalls: ['÷ ۲ را فراموش نکن.'] },
-    { id: 'comp', title: 'شکل‌های ترکیبی', emoji: '🏰', formula: 'مساحت = جمع مساحت اجزا',
-      paragraphs: ['شکل از چند بخش ساخته می‌شود.', 'مساحت = جمع مساحت بخش‌ها.'],
+        { text: 'ذوزنقه‌ای با قاعده‌های ۳ و ۵ و ارتفاع ۴. مساحتش چقدر است؟',
+          shape: ShapesAnim.areaTrapezoid(5, 3, 4),
+          steps: ['(۳ + ۵) × ۴ = ۳۲', '۳۲ ÷ ۲ = ۱۶'], answer: '۱۶ سانتی‌متر مربع' }
+      ],
+      tips: ['دو قاعده را جمع کن.'], pitfalls: ['فراموش نکن ÷ ۲.']
+    },
+    {
+      id: 'comp', title: 'شکل‌های ترکیبی', emoji: '🏰', formula: 'مساحت = جمع مساحت اجزا',
+      paragraphs: ['شکل از چند بخش ساده ساخته می‌شود.', 'مساحت کل = جمع مساحت اجزا.'],
       examples: [
-        { html: ShapesAnim.compositeShape('rocket', 14), steps: ['نوک (۲ مربع) + بدنه (۶) + پهن (۵) + باله‌ها (۲)'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('robot', 12), steps: ['سر + بدن + شکم + پاها'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('castle', 12), steps: ['برج‌ها + دیوار + دروازه'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('tree', 12), steps: ['نوک + طبقه‌ها + تنه'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('boat', 14), steps: ['بادبان + بدنه'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('house', 12), steps: ['سقف + دیوار'], answer: 'مساحت کل' },
-        { html: ShapesAnim.compositeShape('fish', 12), steps: ['باله‌ها + بدن'], answer: 'مساحت کل' }
-      ], tips: ['شکل را به اجزای ساده تقسیم کن.'], pitfalls: ['مساحت‌ها را جمع کن.'] }
+        { text: 'این ربات از چند مستطیل ساخته شده. مساحت کلش چقدر است؟',
+          shape: ShapesAnim.compositeShape('robot', 14),
+          steps: ['مساحت هر بخش را جدا حساب می‌کنیم.', 'در انتها همه را با هم جمع می‌کنیم.'], answer: 'مجموع مساحت اجزا' },
+        { text: 'این قلعه از چند بخش ساخته شده. مساحتش چقدر است؟',
+          shape: ShapesAnim.compositeShape('castle', 13),
+          steps: ['برج‌ها + دیوار + دروازه', 'جمع همه'], answer: 'مجموع مساحت اجزا' },
+        { text: 'این درخت کریسمس از چند طبقه ساخته شده. مساحتش چقدر است؟',
+          shape: ShapesAnim.compositeShape('tree', 13),
+          steps: ['نوک + طبقه‌ها + تنه', 'جمع همه'], answer: 'مجموع مساحت اجزا' }
+      ],
+      tips: ['شکل را به اجزای ساده تقسیم کن.'],
+      pitfalls: ['مساحت‌ها را جمع کن، نه ضرب.']
+    }
   ],
   volume: [
-    { id: 'cube', title: 'مکعب', emoji: '🧊', formula: 'حجم = ضلع × ضلع × ضلع',
-      paragraphs: ['حجم = فضای داخل شکل ۳بعدی.'],
+    {
+      id: 'cube', title: 'مکعب', emoji: '🧊', formula: 'حجم = ضلع × ضلع × ضلع',
+      paragraphs: ['حجم = فضای داخل یک شکل ۳بعدی.', 'مکعب = همه ضلع‌ها مساوی.'],
       examples: [
-        { html: ShapesAnim.cubeBuild(2), steps: ['۲ × ۲ × ۲ = ۸'], answer: '۸ سانتی‌متر مکعب' },
-        { html: ShapesAnim.cubeBuild(3), steps: ['۳ × ۳ × ۳ = ۲۷'], answer: '۲۷ سانتی‌متر مکعب' }
-      ], tips: ['واحد مکعب.'], pitfalls: ['مساحت ≠ حجم.'] },
-    { id: 'box', title: 'مکعب مستطیل', emoji: '📦', formula: 'حجم = طول × عرض × ارتفاع',
-      paragraphs: ['مثل جعبه کفش.'],
+        { text: 'مکعبی با ضلع ۲ سانتی‌متر. حجمش چقدر است؟',
+          shape: ShapesAnim.cubeBuild(2),
+          steps: ['روی شکل بزن تا مکعب‌های ۱×۱ یکی‌یکی ظاهر شوند.', '۲ × ۲ × ۲ = ۸'], answer: '۸ سانتی‌متر مکعب' },
+        { text: 'تاسی با ضلع ۳ سانتی‌متر. حجمش چقدر است؟',
+          shape: ShapesAnim.cubeBuild(3),
+          steps: ['۳ × ۳ × ۳ = ۲۷'], answer: '۲۷ سانتی‌متر مکعب' }
+      ],
+      tips: ['واحد = سانتی‌متر مکعب.'],
+      pitfalls: ['مساحت ≠ حجم.']
+    },
+    {
+      id: 'box', title: 'مکعب مستطیل', emoji: '📦', formula: 'حجم = طول × عرض × ارتفاع',
+      paragraphs: ['مثل جعبه کفش یا یخچال، سه اندازه دارد.'],
       examples: [
-        { html: ShapesAnim.boxBuild(3, 2, 2), steps: ['۳ × ۲ × ۲ = ۱۲'], answer: '۱۲ سانتی‌متر مکعب' }
-      ], tips: ['ترتیب مهم نیست.'], pitfalls: ['سه عدد را ضرب کن.'] }
+        { text: 'جعبه‌ای به طول ۳، عرض ۲ و ارتفاع ۲ سانتی‌متر. حجمش چقدر است؟',
+          shape: ShapesAnim.boxBuild(3, 2, 2),
+          steps: ['۳ × ۲ = ۶', '۶ × ۲ = ۱۲'], answer: '۱۲ سانتی‌متر مکعب' }
+      ],
+      tips: ['ترتیب ضرب مهم نیست.'],
+      pitfalls: ['سه عدد را ضرب کن.']
+    }
   ],
   fractions: [
-    { id: 'concept', title: 'مفهوم کسر', emoji: '🍕', formula: 'صورت / مخرج',
-      paragraphs: ['کسر = چند قسمت از کل.'],
+    {
+      id: 'concept', title: 'مفهوم کسر', emoji: '🍕', formula: 'صورت / مخرج',
+      paragraphs: ['کسر = چند قسمت از یک کل.', 'بالا: صورت (چند قسمت برداشته‌ایم). پایین: مخرج (کل به چند قسمت تقسیم شده).'],
       examples: [
-        { html: ShapesAnim.fracPieAnim(3, 4), steps: ['مخرج ۴، صورت ۳'], answer: 'سه‌چهارم' }
-      ], tips: ['مخرج ≠ صفر.'], pitfalls: ['جای صورت و مخرج.'] },
-    { id: 'equiv', title: 'کسر معادل', emoji: '🟰', formula: 'ضرب صورت و مخرج در یک عدد',
-      paragraphs: ['مقدار کسر عوض نمی‌شود.'],
+        { text: 'در این شکل، ۳ قسمت از ۴ قسمت دایره رنگی شده است. کسر آن چقدر است؟',
+          html: ShapesAnim.fracPieAnim(3, 4),
+          steps: ['مخرج = ۴ (کل به ۴ قسمت تقسیم شده)', 'صورت = ۳ (۳ قسمت رنگی)'], answer: 'سه‌چهارم' }
+      ],
+      tips: ['مخرج هرگز صفر نیست.'],
+      pitfalls: ['جای صورت و مخرج را عوض نکن.']
+    },
+    {
+      id: 'equiv', title: 'کسر معادل', emoji: '🟰', formula: 'ضرب صورت و مخرج در یک عدد',
+      paragraphs: ['اگر صورت و مخرج را در یک عدد ضرب (یا تقسیم) کنیم، مقدار کسر عوض نمی‌شود.'],
       examples: [
-        { html: `<div style="display:flex;flex-direction:column;gap:8px;align-items:center">${ShapesAnim.fracBarAnim(1, 2)}${ShapesAnim.fracBarAnim(3, 6)}</div>`,
-          steps: ['۱×۳ = ۳ و ۲×۳ = ۶'], answer: 'بله، برابرند' }
-      ], tips: ['× یک عدد.'], pitfalls: ['هم صورت هم مخرج.'] },
-    { id: 'simplify', title: 'ساده کردن', emoji: '✂️', formula: 'تقسیم بر ب.م.م',
-      paragraphs: ['صورت و مخرج را بر ب.م.م تقسیم کن.'],
+        { text: 'آیا یک‌دوم و سه‌ششم با هم برابرند؟',
+          html: `<div style="display:flex;flex-direction:column;gap:12px;align-items:center">
+            <div><div style="text-align:center;margin-bottom:4px">${fracHTML({n:1,d:2})}</div>${ShapesAnim.fracBarAnim(1, 2)}</div>
+            <div><div style="text-align:center;margin-bottom:4px">${fracHTML({n:3,d:6})}</div>${ShapesAnim.fracBarAnim(3, 6)}</div>
+          </div>`,
+          steps: ['۱ × ۳ = ۳ و ۲ × ۳ = ۶', 'هر دو نوار به یک اندازه رنگ شده‌اند.'], answer: 'بله، برابرند' },
+        { text: 'کسر معادلی بنویس که مخرجش ۹ باشد و با دو‌سوم برابر باشد.',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({ n: 2, d: 3 })} = ? / ۹</span>`,
+          steps: ['چون ۹ = ۳ × ۳، صورت را هم در ۳ ضرب می‌کنیم.', '۲ × ۳ = ۶'], answer: 'شش‌نهم' }
+      ],
+      tips: ['ضرب در یک عدد، مقدار را عوض نمی‌کند.'],
+      pitfalls: ['هم صورت هم مخرج را ضرب کن.']
+    },
+    {
+      id: 'simplify', title: 'ساده کردن کسر', emoji: '✂️', formula: 'تقسیم بر ب.م.م',
+      paragraphs: [
+        'برای ساده کردن یک کسر، صورت و مخرج را بر بزرگ‌ترین مقسوم‌علیه مشترک (ب.م.م) تقسیم می‌کنیم.',
+        'ب.م.م = بزرگ‌ترین عددی که هم صورت و هم مخرج بر آن بخش‌پذیرند.'
+      ],
       examples: [
-        { html: fracHTML({ n: 2, d: 4 }), steps: ['ب.م.م = ۲'], answer: 'یک‌دوم' },
-        { html: fracHTML({ n: 8, d: 12 }), steps: ['ب.م.م = ۴'], answer: 'دو‌سوم' }
-      ], tips: ['با کوچک شروع کن.'], pitfalls: ['فقط یکی را تقسیم نکن.'] },
-    { id: 'compare', title: 'مقایسه', emoji: '⚖️', formula: 'مخرج مشترک',
-      paragraphs: ['برای مقایسه، مخرج مشترک.'],
+        { text: 'کسر دو‌چهارم را ساده کن.',
+          html: `<div style="text-align:center;font-size:1.4rem">${fracHTML({ n: 2, d: 4 })}</div>`,
+          steps: [
+            'عددهایی که هم ۲ و هم ۴ بر آن‌ها بخش‌پذیرند: ۱ و ۲',
+            'بزرگ‌ترینش ب.م.م = ۲',
+            'صورت ÷ ۲ = ۱ و مخرج ÷ ۲ = ۲',
+            'نتیجه: یک‌دوم'
+          ], answer: 'یک‌دوم' },
+        { text: 'کسر هشت‌دوازدهم را ساده کن.',
+          html: `<div style="text-align:center;font-size:1.4rem">${fracHTML({ n: 8, d: 12 })}</div>`,
+          steps: [
+            'ب.م.م ۸ و ۱۲ = ۴',
+            '۸ ÷ ۴ = ۲ و ۱۲ ÷ ۴ = ۳',
+            'نتیجه: دو‌سوم'
+          ], answer: 'دو‌سوم' }
+      ],
+      tips: ['اگر ب.م.م بزرگ را نمی‌دانی، با اعداد کوچک شروع کن.'],
+      pitfalls: ['فقط صورت یا فقط مخرج را تقسیم نکن.']
+    },
+    {
+      id: 'compare', title: 'مقایسه کسرها', emoji: '⚖️', formula: 'مخرج مشترک',
+      paragraphs: ['برای مقایسه دو کسر، اول مخرج مشترک می‌سازیم، بعد صورت‌ها را مقایسه می‌کنیم.'],
       examples: [
-        { html: ShapesAnim.fracCompareBars(1, 2, 1, 3), steps: ['۳/۶ > ۲/۶'], answer: '۱/۲ بزرگ‌تر' }
-      ], tips: ['مخرج مشترک.'], pitfalls: ['مخرج بزرگ‌تر ≠ بزرگ‌تر.'] },
-    { id: 'add', title: 'جمع', emoji: '➕', formula: 'مخرج مشترک + جمع',
-      paragraphs: ['مخرج مشترک، سپس صورت‌ها.'],
+        { text: 'کدام کسر بزرگ‌تر است: یک‌دوم یا یک‌سوم؟',
+          html: ShapesAnim.fracCompareBars(1, 2, 1, 3),
+          steps: [
+            'مخرج مشترک ۲ و ۳ = ۶',
+            'یک‌دوم = سه‌ششم',
+            'یک‌سوم = دو‌ششم',
+            '۳ > ۲ پس یک‌دوم بزرگ‌تر است.'
+          ], answer: 'یک‌دوم بزرگ‌تر است' }
+      ],
+      tips: ['مخرج بزرگ‌تر به معنی کسر بزرگ‌تر نیست.'],
+      pitfalls: ['فقط به مخرج نگاه نکن.']
+    },
+    {
+      id: 'add', title: 'جمع کسرها', emoji: '➕', formula: 'مخرج مشترک، سپس جمع صورت',
+      paragraphs: ['اگر مخرج‌ها مساوی باشند، فقط صورت‌ها را جمع می‌کنیم.', 'اگر مخرج‌ها فرق داشته باشند، اول مخرج مشترک می‌سازیم.'],
       examples: [
-        { html: `<span dir="ltr">${fracHTML({n:1,d:2})} + ${fracHTML({n:1,d:3})}</span>`,
-          steps: ['۳/۶ + ۲/۶ = ۵/۶'], answer: '۵/۶' }
-      ], tips: ['مخرج مشترک.'], pitfalls: ['مخرج‌ها را جمع نکن.'] },
-    { id: 'sub', title: 'تفریق', emoji: '➖', formula: 'مخرج مشترک + تفریق',
-      paragraphs: ['بزرگ‌تر منهای کوچک‌تر.'],
+        { text: 'جمع یک‌دوم و یک‌سوم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:1,d:2})} + ${fracHTML({n:1,d:3})} = ?</span>`,
+          steps: [
+            'مخرج‌ها فرق دارند. ک.م.م ۲ و ۳ = ۶',
+            'یک‌دوم = سه‌ششم',
+            'یک‌سوم = دو‌ششم',
+            'صورت‌ها: ۳ + ۲ = ۵',
+            'نتیجه: پنج‌ششم'
+          ], answer: 'پنج‌ششم' },
+        { text: 'جمع یک‌پنجم و دو‌پنجم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:1,d:5})} + ${fracHTML({n:2,d:5})} = ?</span>`,
+          steps: ['مخرج‌ها مساوی (۵).', 'صورت‌ها: ۱ + ۲ = ۳', 'نتیجه: سه‌پنجم'], answer: 'سه‌پنجم' }
+      ],
+      tips: ['مخرج‌ها را با هم جمع نکن!'],
+      pitfalls: ['فقط صورت‌ها را جمع می‌کنیم.']
+    },
+    {
+      id: 'sub', title: 'تفریق کسرها', emoji: '➖', formula: 'مخرج مشترک، سپس تفریق صورت',
+      paragraphs: ['مانند جمع، اول مخرج مشترک بعد صورت‌ها را کم می‌کنیم.'],
       examples: [
-        { html: `<span dir="ltr">${fracHTML({n:3,d:5})} − ${fracHTML({n:1,d:5})}</span>`,
-          steps: ['۳ − ۱ = ۲'], answer: '۲/۵' },
-        { html: `<span dir="ltr">${fracHTML({n:3,d:4})} − ${fracHTML({n:1,d:2})}</span>`,
-          steps: ['۳/۴ − ۲/۴ = ۱/۴'], answer: '۱/۴' }
-      ], tips: ['بزرگ‌تر اول.'], pitfalls: ['ترتیب مهم است.'] },
-    { id: 'mul', title: 'ضرب', emoji: '✖️', formula: 'صورت×صورت، مخرج×مخرج',
-      paragraphs: ['مخرج مشترک لازم نیست.'],
+        { text: 'تفریق سه‌پنجم و یک‌پنجم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:3,d:5})} − ${fracHTML({n:1,d:5})} = ?</span>`,
+          steps: ['مخرج‌ها مساوی (۵).', '۳ − ۱ = ۲', 'نتیجه: دو‌پنجم'], answer: 'دو‌پنجم' },
+        { text: 'تفریق سه‌چهارم و یک‌دوم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:3,d:4})} − ${fracHTML({n:1,d:2})} = ?</span>`,
+          steps: [
+            'مخرج مشترک: ۴',
+            'یک‌دوم = دو‌چهارم',
+            'سه‌چهارم − دو‌چهارم = یک‌چهارم'
+          ], answer: 'یک‌چهارم' }
+      ],
+      tips: ['نتیجه را ساده کن.'],
+      pitfalls: ['فقط صورت‌ها کم می‌شوند.']
+    },
+    {
+      id: 'mul', title: 'ضرب کسرها', emoji: '✖️', formula: 'صورت × صورت، مخرج × مخرج',
+      paragraphs: ['در ضرب کسرها به مخرج مشترک نیازی نیست.', 'صورت‌ها را در هم و مخرج‌ها را در هم ضرب می‌کنیم.'],
       examples: [
-        { html: `<span dir="ltr">${fracHTML({n:1,d:2})} × ${fracHTML({n:2,d:3})}</span>`,
-          steps: ['۲/۶ = ۱/۳'], answer: '۱/۳' }
-      ], tips: ['ساده کن.'], pitfalls: ['مخرج مشترک لازم نیست.'] },
-    { id: 'div', title: 'تقسیم', emoji: '➗', formula: 'معکوس + ضرب',
-      paragraphs: ['کسر دوم را معکوس کن.'],
+        { text: 'حاصل ضرب یک‌دوم در دو‌سوم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:1,d:2})} × ${fracHTML({n:2,d:3})} = ?</span>`,
+          steps: [
+            'صورت × صورت: ۱ × ۲ = ۲',
+            'مخرج × مخرج: ۲ × ۳ = ۶',
+            'دو‌ششم را ساده می‌کنیم = یک‌سوم'
+          ], answer: 'یک‌سوم' }
+      ],
+      tips: ['قبل از ضرب، ساده کن.'],
+      pitfalls: ['مخرج مشترک لازم نیست.']
+    },
+    {
+      id: 'div', title: 'تقسیم کسرها', emoji: '➗', formula: 'معکوس و ضرب',
+      paragraphs: ['برای تقسیم، کسر دوم را معکوس می‌کنیم و در کسر اول ضرب می‌کنیم.'],
       examples: [
-        { html: `<span dir="ltr">${fracHTML({n:1,d:2})} ÷ ${fracHTML({n:1,d:3})}</span>`,
-          steps: ['۱/۲ × ۳/۱ = ۳/۲'], answer: '۳/۲' }
-      ], tips: ['تقسیم = ضرب در معکوس.'], pitfalls: ['کسر اول را معکوس نکن.'] }
+        { text: 'حاصل تقسیم یک‌دوم بر یک‌سوم چقدر است؟',
+          html: `<span dir="ltr" style="font-size:1.3rem">${fracHTML({n:1,d:2})} ÷ ${fracHTML({n:1,d:3})} = ?</span>`,
+          steps: [
+            'معکوس یک‌سوم می‌شود سه‌یکم',
+            'یک‌دوم × سه‌یکم = سه‌دوم'
+          ], answer: 'سه‌دوم' }
+      ],
+      tips: ['تقسیم = ضرب در معکوس.'],
+      pitfalls: ['کسر اول را معکوس نکن.']
+    },
+    {
+      id: 'mixed', title: 'عدد مخلوط', emoji: '🔢', formula: 'عدد صحیح + کسر',
+      paragraphs: ['عدد مخلوط ترکیبی از یک عدد صحیح و یک کسر است.', 'برای تبدیل به کسر: (عدد صحیح × مخرج) + صورت.'],
+      examples: [
+        { text: 'عدد مخلوط «۲ و یک‌سوم» را به کسر تبدیل کن.',
+          html: `<div style="text-align:center;font-size:1.4rem">${mixedHTML({ n: 7, d: 3 })}</div>`,
+          steps: [
+            '(۲ × ۳) + ۱ = ۷',
+            'مخرج همان ۳ می‌ماند',
+            'کسر: هفت‌سوم'
+          ], answer: 'هفت‌سوم' }
+      ],
+      tips: ['عدد صحیح را در مخرج ضرب کن، بعد صورت را اضافه کن.'],
+      pitfalls: ['عدد صحیح را ضرب نکردن.']
+    }
   ],
   decimals: [
-    { id: 'concept', title: 'مفهوم اعشار', emoji: '🔟', formula: 'دهم، صدم',
-      paragraphs: ['اعشار برای کمتر از یک.'],
+    {
+      id: 'concept', title: 'مفهوم اعشار', emoji: '🔟', formula: 'دهم، صدم',
+      paragraphs: ['اعداد اعشاری برای نمایش قسمت‌های کمتر از یک به کار می‌روند.', 'بعد از ممیز: رقم اول دهم، رقم دوم صدم.'],
       examples: [
-        { html: eq('۰٫۵'), steps: ['۵ دهم = نصف'], answer: 'نصف' }
-      ], tips: ['قبل ممیز صفر.'], pitfalls: ['جایگاه‌ها.'] },
-    { id: 'online', title: 'روی محور', emoji: '📏', formula: 'دهم‌ها',
-      paragraphs: ['۰ تا ۱ را به ۱۰ قسمت تقسیم کن.'],
+        { text: 'عدد ۰٫۵ یعنی چه؟',
+          html: `<div style="text-align:center;font-size:1.6rem;direction:ltr">${faDec(0.5, 1)}</div>`,
+          steps: ['۵ دهم یعنی نصف.'], answer: 'نصف' }
+      ],
+      tips: ['قبل از ممیز صفر می‌گذاریم.'],
+      pitfalls: ['جایگاه‌ها را اشتباه نکن.']
+    },
+    {
+      id: 'online', title: 'اعشار روی محور', emoji: '📏', formula: 'دهم‌ها روی محور',
+      paragraphs: ['فاصله‌ی ۰ تا ۱ را به ۱۰ قسمت مساوی تقسیم می‌کنیم. هر قسمت یک‌دهم است.'],
       examples: [
-        { html: ShapesAnim.decimalLine([], 0.5, 0, 1), steps: ['وسط ۰ و ۱'], answer: '۰٫۵' },
-        { html: ShapesAnim.decimalLine([], 0.3, 0, 1), steps: ['سه پله جلو'], answer: '۰٫۳' }
-      ], tips: ['هر خط کوچک = یک‌دهم.'], pitfalls: ['خطوط اصلی.'] },
-    { id: 'compare', title: 'مقایسه', emoji: '⚖️', formula: 'رقم به رقم',
-      paragraphs: ['اول قسمت صحیح.'],
+        { text: 'عدد ۰٫۵ روی محور کجاست؟',
+          html: ShapesAnim.decimalLine([], 0.5, 0, 1),
+          steps: ['وسط بین ۰ و ۱'], answer: 'وسط دقیق' },
+        { text: 'عدد ۰٫۳ روی محور کجاست؟',
+          html: ShapesAnim.decimalLine([], 0.3, 0, 1),
+          steps: ['سه پله به سمت راست ۰'], answer: 'سه دهم جلو' }
+      ],
+      tips: ['هر خط کوچک = یک‌دهم.'],
+      pitfalls: ['خطوط اصلی را با فرعی اشتباه نگیر.']
+    },
+    {
+      id: 'compare', title: 'مقایسه اعشار', emoji: '⚖️', formula: 'رقم به رقم',
+      paragraphs: ['اول قسمت صحیح، بعد ارقام اعشار را از چپ به راست مقایسه می‌کنیم.'],
       examples: [
-        { html: ShapesAnim.decCompareBars(0.7, 0.5), steps: ['۷ > ۵'], answer: '۰٫۷ بزرگ‌تر' }
-      ], tips: ['با صفر پر کن.'], pitfalls: ['ارقام بیشتر ≠ بزرگ‌تر.'] },
-    { id: 'add', title: 'جمع', emoji: '➕', formula: 'ممیز تراز',
-      paragraphs: ['ممیزها زیر هم.'],
+        { text: 'کدام بزرگ‌تر است: ۰٫۷ یا ۰٫۵؟',
+          html: ShapesAnim.decCompareBars(0.7, 0.5),
+          steps: ['۷ > ۵ پس ۰٫۷ بزرگ‌تر است.'], answer: '۰٫۷ بزرگ‌تر' }
+      ],
+      tips: ['با صفر پر کن اگر تعداد ارقام کم است.'],
+      pitfalls: ['ارقام بیشتر ≠ عدد بزرگ‌تر.']
+    },
+    {
+      id: 'add', title: 'جمع اعشار', emoji: '➕', formula: 'ممیزها تراز',
+      paragraphs: ['ممیزها را زیر هم تراز می‌کنیم، بعد جمع می‌کنیم.'],
       examples: [
-        { html: eq('۳٫۴ + ۲٫۱'), steps: ['۵٫۵'], answer: '۵٫۵' },
-        { html: ShapesAnim.decimalAddOnLine(0, 1, 0.3, 0.4), steps: ['از ۰ به ۰٫۳، سپس ۰٫۴ جلو'], answer: '۰٫۷' }
-      ], tips: ['ممیز تراز.'], pitfalls: ['بدون تراز ننویس.'] },
-    { id: 'sub', title: 'تفریق', emoji: '➖', formula: 'ممیز تراز',
-      paragraphs: ['بزرگ‌تر منهای کوچک‌تر.'],
+        { text: 'جمع ۳٫۴ + ۲٫۱ چقدر است؟',
+          html: `<div style="text-align:center;font-size:1.3rem" dir="ltr">${faDec(3.4,1)} + ${faDec(2.1,1)} = ?</div>`,
+          steps: ['۵٫۵'], answer: '۵٫۵' },
+        { text: 'روی محور: از صفر شروع می‌کنیم، ۰٫۳ جلو می‌رویم، بعد ۰٫۴ دیگر جلو می‌رویم. به چه عددی می‌رسیم؟',
+          html: ShapesAnim.decimalAddOnLine(0, 1, 0.3, 0.4),
+          steps: ['۰٫۳ + ۰٫۴ = ۰٫۷'], answer: '۰٫۷' }
+      ],
+      tips: ['ممیزها زیر هم.'], pitfalls: ['بدون تراز ننویس.']
+    },
+    {
+      id: 'sub', title: 'تفریق اعشار', emoji: '➖', formula: 'ممیزها تراز',
+      paragraphs: ['عدد بزرگ‌تر را بالا می‌نویسیم، ممیزها را تراز می‌کنیم.'],
       examples: [
-        { html: eq('۵٫۵ − ۲٫۱'), steps: ['۳٫۴'], answer: '۳٫۴' },
-        { html: ShapesAnim.decimalSubOnLine(0, 1, 0.9, 0.4), steps: ['از ۰ به ۰٫۹، سپس ۰٫۴ به چپ'], answer: '۰٫۵' }
-      ], tips: ['تراز ممیز.'], pitfalls: ['ترتیب درست.'] },
-    { id: 'frac-to-dec', title: 'کسر به اعشار', emoji: '🔄', formula: 'صورت ÷ مخرج',
-      paragraphs: ['تقسیم.'],
+        { text: 'تفریق ۵٫۵ − ۲٫۱ چقدر است؟',
+          html: `<div style="text-align:center;font-size:1.3rem" dir="ltr">${faDec(5.5,1)} − ${faDec(2.1,1)} = ?</div>`,
+          steps: ['۳٫۴'], answer: '۳٫۴' },
+        { text: 'روی محور: از صفر تا ۰٫۹ جلو می‌رویم، سپس ۰٫۴ به عقب برمی‌گردیم. کجا می‌رسیم؟',
+          html: ShapesAnim.decimalSubOnLine(0, 1, 0.9, 0.4),
+          steps: ['۰٫۹ − ۰٫۴ = ۰٫۵'], answer: '۰٫۵' }
+      ],
+      tips: ['تراز ممیز.'], pitfalls: ['ترتیب درست.']
+    },
+    {
+      id: 'frac-to-dec', title: 'کسر به اعشار', emoji: '🔄', formula: 'صورت ÷ مخرج',
+      paragraphs: ['صورت را بر مخرج تقسیم می‌کنیم.'],
       examples: [
-        { html: fracHTML({ n: 3, d: 4 }), steps: ['۳ ÷ ۴ = ۰٫۷۵'], answer: '۰٫۷۵' }
-      ], tips: ['بعضی متناوب.'], pitfalls: ['برعکس تقسیم نکن.'] },
-    { id: 'dec-to-frac', title: 'اعشار به کسر', emoji: '🔄', formula: 'مخرج ۱۰ یا ۱۰۰',
-      paragraphs: ['تعداد رقم = تعداد صفر.'],
+        { text: 'کسر سه‌چهارم را به اعشار تبدیل کن.',
+          html: `<div style="text-align:center;font-size:1.5rem">${fracHTML({ n: 3, d: 4 })}</div>`,
+          steps: ['۳ ÷ ۴ = ۰٫۷۵'], answer: '۰٫۷۵' }
+      ],
+      tips: ['بعضی کسرها اعشار متناوب می‌دهند.'],
+      pitfalls: ['مخرج را بر صورت تقسیم نکن.']
+    },
+    {
+      id: 'dec-to-frac', title: 'اعشار به کسر', emoji: '🔄', formula: 'مخرج ۱۰ یا ۱۰۰',
+      paragraphs: ['تعداد ارقام بعد از ممیز = تعداد صفرهای مخرج.'],
       examples: [
-        { html: eq('۰٫۷'), steps: ['۷/۱۰'], answer: '۷/۱۰' },
-        { html: eq('۰٫۷۵'), steps: ['۷۵/۱۰۰ = ۳/۴'], answer: '۳/۴' }
-      ], tips: ['ساده کن.'], pitfalls: ['تعداد صفرها.'] }
+        { text: 'عدد اعشاری ۰٫۷ را به کسر تبدیل کن.',
+          html: `<div style="text-align:center;font-size:1.5rem;direction:ltr">${faDec(0.7, 1)}</div>`,
+          steps: ['۱ رقم بعد از ممیز → مخرج ۱۰', 'نتیجه: هفت‌دهم'], answer: 'هفت‌دهم' },
+        { text: 'عدد اعشاری ۰٫۷۵ را به کسر تبدیل کن.',
+          html: `<div style="text-align:center;font-size:1.5rem;direction:ltr">${faDec(0.75, 2)}</div>`,
+          steps: ['۲ رقم بعد از ممیز → مخرج ۱۰۰', 'هفتادوپنج‌صدم را ساده کن', 'نتیجه: سه‌چهارم'], answer: 'سه‌چهارم' }
+      ],
+      tips: ['در انتها ساده کن.'], pitfalls: ['تعداد صفرها را درست بشمار.']
+    }
   ]
 };
 
@@ -2455,6 +3001,7 @@ function viewLesson(topic, id) {
     ${lesson.examples.map((ex, i) => `
       <div class="example-card">
         <p class="ex-title">مثال ${fa(i + 1)}:</p>
+        ${ex.text ? `<p>${ex.text}</p>` : ''}
         ${wrapAnim(ex.shape, { hint })}
         ${wrapAnim(ex.html, { wrapClass: '', wrapStyle: 'text-align:center;padding:8px', hint })}
         <ul class="example-steps">${ex.steps.map(s => `<li>${s}</li>`).join('')}</ul>
@@ -2610,7 +3157,7 @@ function viewExamSetup(topic) {
   const names = { perimeter: 'محیط', area: 'مساحت', volume: 'حجم', fractions: 'کسرها', decimals: 'اعداد اعشاری' };
   return `${header('🎯 آزمون', true)}
   <div class="card">
-    <h3 class="card-title">تنظیمات</h3>
+    <h3 class="card-title">تنظیمات آزمون</h3>
     <p>موضوع: <strong>${names[topic]}</strong></p>
     <label style="display:block;margin-top:12px">تعداد سوال:
       <select id="examCount" class="num-input" style="text-align:right">
@@ -2631,12 +3178,12 @@ function viewExamSetup(topic) {
     </label>
   </div>
   <div class="card" style="background:var(--hint-bg);border-right:4px solid var(--info)">
-    <p style="margin:0;font-size:.9rem">📝 پاسخ‌ها در انتها بررسی می‌شوند.</p>
+    <p style="margin:0;font-size:.9rem">📝 پاسخ‌ها در انتهای آزمون بررسی می‌شوند.</p>
   </div>
   <div class="card" style="background:var(--feedback-warn-bg);border-right:4px solid var(--accent)">
-    <p style="margin:0;font-size:.9rem">⚠️ نمره منفی: هر ۳ غلط = ۱ نمره.</p>
+    <p style="margin:0;font-size:.9rem">⚠️ نمره منفی: هر ۳ پاسخ غلط = ۱ نمره کسر می‌شود.</p>
   </div>
-  <button class="btn full" style="margin-top:16px" onclick="window.__startExam('${topic}')">🚀 شروع</button>
+  <button class="btn full" style="margin-top:16px" onclick="window.__startExam('${topic}')">🚀 شروع آزمون</button>
   ${bottomNav()}`;
 }
 function startExam(topic) {
@@ -2660,15 +3207,17 @@ function startExam(topic) {
 /* ═════════ ۳۹) MULTI EXAM ═════════ */
 function viewMultiExamSetup() {
   return `${header('🎯 آزمون جامع', true)}
+  <p style="color:var(--muted);margin:0 0 14px;text-align:center">درس‌های مورد آزمون:</p>
   <div class="card">
-    <h3 class="card-title">دروس</h3>
-    ${ALL_TOPICS.map(t => `<label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--card-2);border-radius:12px;margin-bottom:8px;font-weight:600">
+    <h3 class="card-title">📚 انتخاب دروس</h3>
+    ${ALL_TOPICS.map(t => `<label style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--card-2);border-radius:12px;margin-bottom:8px;font-weight:600;cursor:pointer">
       <input type="checkbox" class="topic-check" value="${t}" checked style="width:22px;height:22px">
       <span style="font-size:1.3rem">${TOPIC_EMOJIS[t]}</span><span>${TOPIC_NAMES[t]}</span>
     </label>`).join('')}
   </div>
   <div class="card">
-    <label style="display:block;margin-top:12px">تعداد:
+    <h3 class="card-title">⚙️ تنظیمات</h3>
+    <label style="display:block;margin-top:12px">تعداد سوال:
       <select id="mExamCount" class="num-input" style="text-align:right">
         ${[5, 10, 15, 20, 25].map(n => `<option value="${n}" ${n === 10 ? 'selected' : ''}>${fa(n)}</option>`).join('')}
       </select>
@@ -2680,16 +3229,18 @@ function viewMultiExamSetup() {
     </label>
     <label style="display:block;margin-top:12px">سطح:
       <select id="mExamDiff" class="num-input" style="text-align:right">
-        <option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option>
+        <option value="easy">آسان</option>
+        <option value="medium" selected>متوسط</option>
+        <option value="hard">سخت</option>
       </select>
     </label>
   </div>
-  <button class="btn full" style="margin-top:16px" onclick="window.__startMultiExam()">🚀 شروع</button>
+  <button class="btn full" style="margin-top:16px" onclick="window.__startMultiExam()">🚀 شروع آزمون جامع</button>
   ${bottomNav()}`;
 }
 function startMultiExam() {
   const topics = Array.from(document.querySelectorAll('.topic-check:checked')).map(c => c.value);
-  if (!topics.length) { alert('حداقل یک درس.'); return; }
+  if (!topics.length) { alert('حداقل یک درس را انتخاب کن.'); return; }
   const count = parseInt(document.getElementById('mExamCount').value, 10) || 10;
   const time = parseInt(document.getElementById('mExamTime').value, 10) || 300;
   const diff = document.getElementById('mExamDiff').value || 'medium';
@@ -2713,7 +3264,7 @@ function startExamTimer() {
   examTimer = setInterval(() => {
     if (!session || session.mode !== 'exam') { clearInterval(examTimer); examTimer = null; return; }
     session.timeLeft--;
-    if (session.timeLeft <= 0) { clearInterval(examTimer); examTimer = null; alert('⏰ زمان تمام!'); endExam(); return; }
+    if (session.timeLeft <= 0) { clearInterval(examTimer); examTimer = null; alert('⏰ زمان تمام شد!'); endExam(); return; }
     const statsRow = document.querySelectorAll('.stat-value');
     if (statsRow.length >= 2) {
       const min = Math.floor(session.timeLeft / 60), sec = session.timeLeft % 60;
@@ -2802,13 +3353,13 @@ function viewExamResult() {
   const stu = activeStudent();
   const titleText = isMulti ? '🎯 آزمون جامع' : 'آزمون ' + (TOPIC_NAMES[topic] || '');
   return `${header('📋 کارنامه', true)}
-  ${stu ? `<p style="text-align:center;color:var(--muted)">${escHtml(fullName(stu))} — پایه ${fa(stu.grade)}</p>` : ''}
+  ${stu ? `<p style="text-align:center;color:var(--muted);margin:0 0 4px">${escHtml(fullName(stu))} — پایه ${fa(stu.grade)}</p>` : ''}
   <p style="text-align:center;color:var(--muted);margin:0 0 12px">${titleText}</p>
   <div class="card" style="text-align:center">
-    <div style="font-size:4rem">${emoji}</div>
+    <div style="font-size:4rem;margin-bottom:8px">${emoji}</div>
     <h2 style="margin:0">${msg}</h2>
     <div style="font-size:2.5rem;font-weight:800;color:var(--primary);margin:12px 0">${fa(pctv)}٪</div>
-    ${penalty > 0 ? `<p style="color:var(--danger)">نمره منفی: ${fa(penalty)}</p>` : ''}
+    ${penalty > 0 ? `<p style="color:var(--danger);font-size:.95rem;margin:4px 0">نمره منفی: ${fa(penalty)} نمره کسر شد</p>` : ''}
     <div class="stats-row" style="margin-top:16px">
       <div class="stat-item"><div class="stat-value" style="color:var(--success)">${fa(correct)}</div><div class="stat-label">درست</div></div>
       <div class="stat-item"><div class="stat-value" style="color:var(--danger)">${fa(wrong)}</div><div class="stat-label">غلط</div></div>
@@ -2816,7 +3367,7 @@ function viewExamResult() {
       <div class="stat-item"><div class="stat-value">${fa(answers.length)}</div><div class="stat-label">کل</div></div>
     </div>
   </div>
-  <h3 style="margin:20px 0 10px">🔎 مرور</h3>
+  <h3 style="margin:20px 0 10px">🔎 مرور پاسخ‌ها</h3>
   <div style="display:grid;gap:10px">
     ${answers.map((a, i) => {
       const correctDisp = displayCorrectWithUnit(a.q);
@@ -2834,7 +3385,7 @@ function viewExamResult() {
           ${a.unanswered ? '<div>پاسخ ندادی</div>' : (userDisp ? `<div>پاسخ تو: <span class="${a.isCorrect ? 'correct-text' : 'wrong-text'}">${userDisp}</span></div>` : '')}
           <div>پاسخ درست: <span class="correct-text">${correctDisp}</span></div>
         </div>
-        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:.9rem;color:var(--primary)">📝 راه‌حل</summary>
+        <details style="margin-top:8px"><summary style="cursor:pointer;font-size:.9rem;color:var(--primary);font-weight:600">📝 راه‌حل</summary>
           <ul class="steps">${a.q.steps.map(s => `<li>${s}</li>`).join('')}</ul>
         </details>
       </div>`;
@@ -2893,7 +3444,7 @@ function viewProgress() {
     }).join('')}
     <button class="btn info full" style="margin-top:12px" onclick="window.__nav('practice',{topic:'${mistakeList[0][0].split(':')[0]}'})">💡 تمرین پیشنهادی</button>
   </div>` : ''}
-  <h3 style="margin:20px 0 10px">📜 تاریخچه</h3>
+  <h3 style="margin:20px 0 10px">📜 تاریخچه آزمون‌ها</h3>
   <div class="card">
     ${stu.history.length ? stu.history.slice(0, 10).map(h => {
       const d = new Date(h.date);
@@ -2908,10 +3459,14 @@ function viewProgress() {
   ${bottomNav()}`;
 }
 
-/* ═════════ ۴۲) SETTINGS ═════════ */
+/* ═════════ ۴۲) SETTINGS (با نمایش نسخه) ═════════ */
 function viewSettings() {
   const s = state.settings;
   return `${header('⚙️ تنظیمات', true)}
+  <div class="card" style="text-align:center;background:var(--hint-bg);border:2px solid var(--primary-l)">
+    <p style="margin:0 0 6px;color:var(--muted);font-size:.9rem">نسخه نرم‌افزار</p>
+    <span class="version-badge">v${APP_VERSION}</span>
+  </div>
   <div class="card"><h3 class="card-title">🎨 حالت نمایش</h3>
     <div class="pill-row">
       <button class="pill ${s.theme === 'light' ? 'active' : ''}" onclick="window.__setSetting('theme','light')">☀️ روشن</button>
@@ -2931,45 +3486,50 @@ function viewSettings() {
       <button class="pill ${!s.animation ? 'active' : ''}" onclick="window.__setSetting('animation',false)">خاموش</button>
     </div>
   </div>
-  <div class="card"><h3 class="card-title">🔊 خواندن صوتی</h3>
+  <div class="card"><h3 class="card-title">🔊 خواندن صوتی سوال</h3>
+    <p class="card-desc">سوال‌ها به صورت صوتی خوانده می‌شوند (نیازمند مرورگر با پشتیبانی TTS).</p>
     <div class="pill-row" style="margin-top:8px">
       <button class="pill ${s.tts ? 'active' : ''}" onclick="window.__setSetting('tts',true)">روشن</button>
       <button class="pill ${!s.tts ? 'active' : ''}" onclick="window.__setSetting('tts',false)">خاموش</button>
     </div>
   </div>
-  <div class="card"><h3 class="card-title">⏱ بدون تایمر</h3>
+  <div class="card"><h3 class="card-title">⏱ حالت بدون تایمر</h3>
+    <p class="card-desc">برای دانش‌آموزانی که استرس زمان دارند.</p>
     <div class="pill-row" style="margin-top:8px">
       <button class="pill ${s.noTimer ? 'active' : ''}" onclick="window.__setSetting('noTimer',true)">روشن</button>
       <button class="pill ${!s.noTimer ? 'active' : ''}" onclick="window.__setSetting('noTimer',false)">خاموش</button>
     </div>
   </div>
-  <div class="card"><h3 class="card-title">🎚️ دشواری</h3>
+  <div class="card"><h3 class="card-title">🎚️ دشواری پیش‌فرض</h3>
     <div class="pill-row">
       ${['easy', 'medium', 'hard'].map(d => `<button class="pill ${s.difficulty === d ? 'active' : ''}" onclick="window.__setSetting('difficulty','${d}')">${d === 'easy' ? 'آسان' : d === 'medium' ? 'متوسط' : 'سخت'}</button>`).join('')}
     </div>
   </div>
-  <div class="card"><h3 class="card-title">🔢 اعداد</h3>
+  <div class="card"><h3 class="card-title">🔢 نمایش اعداد</h3>
     <div class="pill-row">
       <button class="pill ${s.persianNumbers ? 'active' : ''}" onclick="window.__setSetting('persianNumbers',true)">فارسی ۱۲۳</button>
       <button class="pill ${!s.persianNumbers ? 'active' : ''}" onclick="window.__setSetting('persianNumbers',false)">انگلیسی 123</button>
     </div>
   </div>
-  <div class="card"><h3 class="card-title">🔧 Debug</h3>
+  <div class="card"><h3 class="card-title">🔧 حالت Debug</h3>
+    <p class="card-desc">نمایش لاگ عملیات و اطلاعات فنی برای توسعه‌دهنده.</p>
     <div class="pill-row" style="margin-top:8px">
       <button class="pill ${s.debug ? 'active' : ''}" onclick="window.__setSetting('debug',true)">روشن</button>
       <button class="pill ${!s.debug ? 'active' : ''}" onclick="window.__setSetting('debug',false)">خاموش</button>
     </div>
-    ${s.debug ? `<p style="font-size:.85rem;color:var(--muted);margin-top:10px">نسخه: ${APP_VERSION}</p>
-      <div class="debug-panel" id="debugLog">${debugLog.join('\n') || 'لاگی نیست'}</div>` : ''}
+    ${s.debug ? `<p style="font-size:.85rem;color:var(--muted);margin-top:10px">دانش‌آموز فعال: ${state.activeStudentId || '—'}</p>
+      <div class="debug-panel" id="debugLog">${debugLog.join('\n') || 'لاگی ثبت نشده'}</div>` : ''}
   </div>
   <div class="card"><h3 class="card-title">👥 دانش‌آموزان</h3>
-    <button class="btn info full" onclick="window.__nav('students')">مدیریت</button>
+    <button class="btn info full" onclick="window.__nav('students')">مدیریت دانش‌آموزان</button>
   </div>
   <div class="card" style="text-align:center">
-    <h3 class="card-title" style="justify-content:center">💬 ارتباط</h3>
+    <h3 class="card-title" style="justify-content:center">💬 ارتباط با تهیه‌کننده</h3>
+    <p class="card-desc" style="margin:0 0 12px">ساخته شده با ❤️ توسط <strong style="direction:ltr;display:inline-block">maysam261</strong></p>
     <button class="btn info full" onclick="window.__nav('contact')">📞 ارتباط</button>
   </div>
   <div class="card"><h3 class="card-title">⚠️ خطرناک</h3>
+    <p class="card-desc">پیشرفت دانش‌آموز فعلی پاک می‌شود.</p>
     <button class="btn danger full" style="margin-top:10px" onclick="window.__resetActiveStudent()">🗑️ پاک کردن پیشرفت</button>
   </div>
   ${bottomNav()}`;
@@ -2986,21 +3546,22 @@ function viewTeacher() {
         ${ALL_TOPICS.map(t => `<option value="${t}">${TOPIC_NAMES[t]}</option>`).join('')}
       </select>
     </label>
-    <label style="display:block;margin-top:12px">تعداد: <input type="number" class="num-input" id="tchCount" value="10" min="1" max="50"></label>
+    <label style="display:block;margin-top:12px">تعداد سوال: <input type="number" class="num-input" id="tchCount" value="10" min="1" max="50"></label>
     <label style="display:block;margin-top:12px">زمان (دقیقه): <input type="number" class="num-input" id="tchTime" value="5" min="1" max="60"></label>
     <label style="display:block;margin-top:12px">سطح:
       <select id="tchDiff" class="num-input" style="text-align:right">
         <option value="easy">آسان</option><option value="medium" selected>متوسط</option><option value="hard">سخت</option>
       </select>
     </label>
-    <button class="btn full" style="margin-top:16px" onclick="window.__teacherStartExam()">🚀 شروع</button>
+    <button class="btn full" style="margin-top:16px" onclick="window.__teacherStartExam()">🚀 شروع آزمون</button>
   </div>
   ${stu ? `<div class="card">
-    <h3 class="card-title">📊 ${escHtml(fullName(stu))}</h3>
+    <h3 class="card-title">📊 وضعیت ${escHtml(fullName(stu))}</h3>
     <p>پایه: <strong>${fa(stu.grade)}</strong></p>
     <p>سطح: <strong>${fa(stu.stats.level)}</strong></p>
     <p>درست: <strong>${fa(stu.stats.totalCorrect)} / ${fa(stu.stats.totalQuestions)}</strong></p>
-    <button class="btn sec full" style="margin-top:10px" onclick="window.__exportData()">📥 خروجی JSON</button>
+    <p>آزمون‌ها: <strong>${fa(stu.history.length)}</strong></p>
+    <button class="btn sec full" style="margin-top:10px" onclick="window.__exportData()">📥 خروجی داده‌ها (JSON)</button>
   </div>` : ''}
   ${bottomNav()}`;
 }
@@ -3021,7 +3582,7 @@ function viewDailyQuestion() {
   <div id="feedbackArea"></div>
   <div style="margin-top:16px">
     <button class="btn full" id="actionBtn" onclick="window.__submitOrNext()">
-      ${session.answered ? '🏠 بازگشت' : '✅ بررسی'}
+      ${session.answered ? '🏠 بازگشت به خانه' : '✅ بررسی پاسخ'}
     </button>
   </div>
   ${bottomNav()}`;
@@ -3084,7 +3645,7 @@ function shareReportImage(pct, correct, wrong, total) {
     ctx.fillStyle = '#ef4444'; ctx.fillText(`❌ نادرست: ${wrong}`, 300, 515);
     ctx.fillStyle = '#6b7280'; ctx.fillText(`📊 کل: ${total}`, 300, 560);
     ctx.fillStyle = '#7c3aed'; ctx.font = 'bold 20px Vazirmatn, Tahoma';
-    ctx.fillText('riazi-yar', 300, 660);
+    ctx.fillText(`riazi-yar v${APP_VERSION}`, 300, 660);
     canvas.toBlob(blob => {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -3153,7 +3714,7 @@ window.__selectStudent = (id) => { sound.click(); session = null; state.activeSt
 window.__deleteStudent = (id) => {
   const stu = state.students.find(s => s.id === id);
   if (!stu) return;
-  if (!confirm(`مطمئنی؟ «${fullName(stu)}»`)) return;
+  if (!confirm(`مطمئنی می‌خواهی «${fullName(stu)}» را حذف کنی؟`)) return;
   state.students = state.students.filter(s => s.id !== id);
   if (state.activeStudentId === id) state.activeStudentId = state.students.length ? state.students[0].id : null;
   saveState(); sound.click(); showFloat('🗑️ حذف شد'); render();
@@ -3166,7 +3727,7 @@ window.__createStudent = () => {
   const name = (nameEl.value || '').trim();
   const family = familyEl ? (familyEl.value || '').trim() : '';
   const grade = gradeEl ? (parseInt(gradeEl.value, 10) || 6) : 6;
-  if (!name) { alert('نام را وارد کن.'); return; }
+  if (!name) { alert('لطفاً نام را وارد کن.'); return; }
   const stu = newStudentTemplate(name, family, grade);
   state.students.push(stu); state.activeStudentId = stu.id;
   saveState(); sound.win(); showFloat(`🎉 خوش آمدی ${name}!`);
@@ -3185,14 +3746,20 @@ window.__resetActiveStudent = () => {
   saveState(); showFloat('🗑️ پاک شد'); navigate('home');
 };
 window.__teacherStartExam = () => {
-  const topic = document.getElementById('tchTopic').value;
-  const count = Math.max(1, Math.min(50, parseInt(document.getElementById('tchCount').value, 10) || 10));
-  const timeMin = Math.max(1, Math.min(60, parseInt(document.getElementById('tchTime').value, 10) || 5));
-  const diff = document.getElementById('tchDiff').value;
+  const topicEl = document.getElementById('tchTopic');
+  const countEl = document.getElementById('tchCount');
+  const timeEl = document.getElementById('tchTime');
+  const diffEl = document.getElementById('tchDiff');
+  if (!topicEl) return;
+  const topic = topicEl.value;
+  const count = Math.max(1, Math.min(50, parseInt(countEl.value, 10) || 10));
+  const timeMin = Math.max(1, Math.min(60, parseInt(timeEl.value, 10) || 5));
+  const time = timeMin * 60;
+  const diff = diffEl.value;
   const questions = [];
   for (let i = 0; i < count; i++) { const q = generateQuestion(topic, diff); if (q) questions.push(q); }
   if (!questions.length) { alert('سوالی پیدا نشد.'); return; }
-  session = { mode: 'exam', topic, difficulty: diff, questions, index: 0, current: questions[0], answers: [], answered: false, selected: null, correct: 0, wrong: 0, unanswered: 0, timeLeft: timeMin * 60, totalTime: timeMin * 60, isMulti: false };
+  session = { mode: 'exam', topic, difficulty: diff, questions, index: 0, current: questions[0], answers: [], answered: false, selected: null, correct: 0, wrong: 0, unanswered: 0, timeLeft: time, totalTime: time, isMulti: false };
   navigate('exam'); startExamTimer();
 };
 window.__exportData = () => {
@@ -3211,11 +3778,16 @@ document.addEventListener('keydown', (e) => {
     const ae = document.activeElement;
     if (ae && ae.tagName === 'INPUT') window.__createStudent();
   }
+  if ((e.key === ' ' || e.key === 'Enter') && document.activeElement &&
+      document.activeElement.classList && document.activeElement.classList.contains('anim-wrap')) {
+    e.preventDefault();
+    window.__playAnim(document.activeElement);
+  }
 });
 
 /* ═════════ ۴۹) INIT ═════════ */
 applyTheme();
-logDebug(`نسخه ${APP_VERSION}`);
+logDebug(`نسخه ${APP_VERSION} بارگذاری شد`);
 
 if (state.students.length === 0) {
   route = { name: 'addStudent', params: {} };

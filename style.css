@@ -32,18 +32,18 @@
   --shadow: 0 6px 18px rgba(124,58,237,.10);
   --shadow-lg: 0 10px 30px rgba(124,58,237,.18);
 
-  /* الگوی سه‌رنگی */
   --shape-fill: #c7d2fe;
   --shape-fill-2: #a5b4fc;
   --shape-fill-3: #fde68a;
   --shape-fill-4: #bbf7d0;
-  --shape-stroke: #ea580c;      /* 🟧 محیط */
-  --shape-accent: #7c3aed;       /* 🟪 خط اندازه‌گیری */
+  --shape-stroke: #ea580c;
+  --shape-accent: #7c3aed;
   --shape-grid: #cbd5e1;
   --shape-blank: #e5e7eb;
-  --shape-angle: #f59e0b;        /* 🟨 علامت زاویه ۹۰° */
-  --shape-unit: #60a5fa;         /* 🟦 مربع‌های واحد */
-  --shape-unit-half: #93c5fd;    /* نیم‌مربع */
+  --shape-angle: #f59e0b;
+  --shape-unit: #93c5fd;
+  --shape-unit-half: #bfdbfe;
+  --shape-dashed: #9ca3af;
 
   --hint-bg: rgba(124,58,237,.10);
   --hint-text: #5b21b6;
@@ -83,7 +83,8 @@
   --shape-blank: #374151;
   --shape-angle: #fbbf24;
   --shape-unit: #3b82f6;
-  --shape-unit-half: #60a5fa;
+  --shape-unit-half: #1d4ed8;
+  --shape-dashed: #6b7280;
 
   --hint-bg: rgba(167,139,250,.15);
   --hint-text: #c4b5fd;
@@ -112,8 +113,10 @@ html, body {
 button { font-family: inherit; cursor: pointer; border: none; background: none; color: inherit; }
 #app { max-width: 780px; margin: 0 auto; padding: 12px 14px 100px; }
 
-.eq { direction: ltr; unicode-bidi: isolate; display: inline-block; }
-.eq * { direction: ltr; }
+/* روابط ریاضی — همیشه چپ به راست */
+.eq { direction: ltr; unicode-bidi: isolate; display: inline-block; text-align: left; }
+.eq * { direction: ltr; unicode-bidi: isolate; }
+.math-ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
 
 /* ============ هدر ============ */
 .top-bar {
@@ -196,7 +199,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 }
 .q-prompt { font-size: 1.05rem; font-weight: 600; margin: 0 0 14px; line-height: 1.9; }
 .q-shape { display: grid; place-items: center; margin: 10px 0; }
-.shape-svg { max-width: 260px; width: 100%; height: auto; }
+.shape-svg { max-width: 320px; width: 100%; height: auto; }
 .svg-label { font-family: Vazirmatn; font-size: 12px; fill: var(--shape-stroke); font-weight: 600; }
 .svg-label-lg { font-family: Vazirmatn; font-size: 14px; fill: var(--shape-stroke); font-weight: 700; }
 .svg-label-measure { font-family: Vazirmatn; font-size: 13px; fill: var(--shape-accent); font-weight: 700; }
@@ -248,12 +251,12 @@ select.num-input {
 .feedback h4 { margin: 0 0 6px; font-size: 1rem; }
 .feedback p { margin: 6px 0; }
 .steps { margin: 8px 0 0; padding: 0; list-style: none; }
-.steps li { padding: 6px 10px; background: var(--card-2); border-radius: 10px; margin-bottom: 4px; font-family: Vazirmatn; }
+.steps li { padding: 6px 10px; background: var(--card-2); border-radius: 10px; margin-bottom: 4px; font-family: Vazirmatn; line-height: 1.9; }
 
 /* ============ کسر ============ */
-.frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 3px; line-height: 1.1; direction: ltr; unicode-bidi: isolate; }
-.frac .num { border-bottom: 2.5px solid currentColor; padding: 0 5px; }
-.frac .den { padding: 0 5px; }
+.frac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; margin: 0 4px; line-height: 1.05; direction: ltr; unicode-bidi: isolate; }
+.frac .num { border-bottom: 2.5px solid currentColor; padding: 0 6px; }
+.frac .den { padding: 0 6px; }
 .frac-int { font-weight: 700; }
 .mixed { display: inline-flex; align-items: center; gap: 4px; direction: ltr; unicode-bidi: isolate; }
 
@@ -269,7 +272,39 @@ select.num-input {
 @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pop { 0% { transform: scale(.9); opacity: 0; } 60% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
 @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
-@keyframes pulseSoft { 0%,100% { opacity: .35; } 50% { opacity: .65; } }
+@keyframes drawStrokeAnim { from { stroke-dashoffset: var(--len, 500); } to { stroke-dashoffset: 0; } }
+@keyframes fadeInAnim { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popInAnim { 0% { opacity:0; transform:scale(.4); } 60% { opacity:1; transform:scale(1.1); } 100% { opacity:1; transform:scale(1); } }
+@keyframes slideDownAnim { from { opacity:0; transform:translateY(-15px); } to { opacity:1; transform:translateY(0); } }
+@keyframes pulseFillAnim { 0%,100% { opacity: .35; } 50% { opacity: .75; } }
+@keyframes labelAppearAnim { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+
+.anim-draw-loop { stroke-dasharray: var(--len, 500); stroke-dashoffset: var(--len, 500); }
+.anim-fade-loop { opacity: 0; }
+.anim-pop-loop  { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.anim-slide-loop { opacity: 0; }
+.anim-label-appear { opacity: 0; }
+.anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out infinite; }
+
+.anim-wrap.playing .anim-draw-loop { animation: drawStrokeAnim 2.2s ease-out both; }
+.anim-wrap.playing .anim-fade-loop { animation: fadeInAnim 1.2s ease both; }
+.anim-wrap.playing .anim-pop-loop  { animation: popInAnim 1.4s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-slide-loop{ animation: slideDownAnim 1.2s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-label-appear { animation: labelAppearAnim .6s ease both; }
+.anim-wrap.playing .anim-pulse-loop{ animation: pulseFillAnim 1.6s ease-in-out 2; }
+
+body.no-anim .anim-draw-loop,
+body.no-anim .anim-fade-loop,
+body.no-anim .anim-pop-loop,
+body.no-anim .anim-slide-loop,
+body.no-anim .anim-label-appear { stroke-dashoffset: 0 !important; opacity: 1 !important; }
+
+body.no-anim .anim-wrap.playing .anim-draw-loop,
+body.no-anim .anim-wrap.playing .anim-fade-loop,
+body.no-anim .anim-wrap.playing .anim-pop-loop,
+body.no-anim .anim-wrap.playing .anim-slide-loop,
+body.no-anim .anim-wrap.playing .anim-pulse-loop,
+body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important; }
 
 /* ============ نمودار ============ */
 .bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
@@ -286,7 +321,7 @@ select.num-input {
 .badge .name { font-size: .78rem; font-weight: 700; text-align: center; }
 
 /* ============ فرمول ============ */
-.formula { display: inline-block; padding: 8px 14px; margin: 6px 0; background: var(--hint-bg); border-radius: 12px; font-weight: 700; font-size: 1.05rem; color: var(--primary-d); }
+.formula { display: inline-block; padding: 8px 14px; margin: 6px 0; background: var(--hint-bg); border-radius: 12px; font-weight: 700; font-size: 1.05rem; color: var(--primary-d); direction: ltr; unicode-bidi: isolate; }
 
 /* ============ فوتر ============ */
 .bottom-nav {
@@ -386,7 +421,7 @@ html { scroll-behavior: smooth; }
 .example-card:last-child { margin-bottom: 0; }
 .example-card .ex-title { font-weight: 700; color: var(--primary-d); margin: 0 0 8px; font-size: .95rem; }
 .example-steps { margin: 8px 0 0; padding: 0; list-style: none; }
-.example-steps li { padding: 6px 10px; background: var(--card); border-radius: 10px; margin-bottom: 4px; font-size: .92rem; border: 1px solid var(--border); }
+.example-steps li { padding: 6px 10px; background: var(--card); border-radius: 10px; margin-bottom: 4px; font-size: .92rem; border: 1px solid var(--border); line-height: 1.9; }
 .example-answer { margin-top: 8px; padding: 8px 12px; background: var(--feedback-good-bg); border-radius: 10px; font-weight: 700; color: var(--success); }
 
 .tips-list, .pitfalls-list { margin: 0; padding: 0; list-style: none; }
@@ -421,7 +456,7 @@ html { scroll-behavior: smooth; }
 }
 .proof-card h3 { margin: 0 0 12px; color: var(--primary-d); display: flex; align-items: center; gap: 8px; font-size: 1.05rem; }
 .proof-card p { margin: 0 0 10px; line-height: 2; }
-.proof-card .conclusion { background: var(--card); padding: 12px; border-radius: 12px; margin-top: 10px; font-weight: 700; border-right: 4px solid var(--success); }
+.proof-card .conclusion { background: var(--card); padding: 12px; border-radius: 12px; margin-top: 10px; font-weight: 700; border-right: 4px solid var(--success); direction: ltr; unicode-bidi: isolate; }
 
 /* ============ انیمیشن با کلیک ============ */
 .anim-wrap {
@@ -444,32 +479,6 @@ html { scroll-behavior: smooth; }
 }
 .anim-hint-wrap { text-align: center; margin-top: 4px; }
 
-@keyframes drawStrokeAnim { from { stroke-dashoffset: var(--len,500); } to { stroke-dashoffset: 0; } }
-@keyframes fadeInAnim { from { opacity: 0; } to { opacity: 1; } }
-@keyframes popInAnim { 0% { opacity:0; transform:scale(.4); } 60% { opacity:1; transform:scale(1.1); } 100% { opacity:1; transform:scale(1); } }
-@keyframes slideDownAnim { from { opacity:0; transform:translateY(-15px); } to { opacity:1; transform:translateY(0); } }
-@keyframes pulseFillAnim { 0%,100% { opacity: .3; } 50% { opacity: .75; } }
-@keyframes labelAppearAnim { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-
-.anim-pop-loop { transform-box: fill-box; transform-origin: center; }
-.anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out 2; }
-.anim-label-appear { animation: labelAppearAnim .6s ease both; }
-
-.anim-wrap.playing .anim-draw-loop { animation: drawStrokeAnim 2.2s ease-out both; }
-.anim-wrap.playing .anim-fade-loop { animation: fadeInAnim 1.8s ease both; }
-.anim-wrap.playing .anim-pop-loop { animation: popInAnim 1.6s cubic-bezier(.34,1.56,.64,1) both; }
-.anim-wrap.playing .anim-slide-loop { animation: slideDownAnim 1.4s cubic-bezier(.34,1.56,.64,1) both; }
-.anim-wrap.playing .anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out 2; }
-.anim-wrap.playing .anim-label-appear { animation: labelAppearAnim .6s ease both; }
-
-body.no-anim .anim-wrap.playing .anim-draw-loop,
-body.no-anim .anim-wrap.playing .anim-fade-loop,
-body.no-anim .anim-wrap.playing .anim-pop-loop,
-body.no-anim .anim-wrap.playing .anim-slide-loop,
-body.no-anim .anim-wrap.playing .anim-pulse-loop,
-body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important; }
-
-/* ============ راهنمای تدریجی ============ */
 .hint-progressive {
   background: var(--hint-bg);
   border-right: 5px solid var(--primary);
@@ -481,14 +490,10 @@ body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important;
 }
 .hint-progressive strong { color: var(--primary-d); }
 
-/* ============ چالش روزانه ============ */
 .daily-card {
   background: linear-gradient(135deg, var(--accent), #f97316);
-  color: #fff;
-  border-radius: var(--radius);
-  padding: 16px;
-  text-align: center;
-  margin-bottom: 14px;
+  color: #fff; border-radius: var(--radius);
+  padding: 16px; text-align: center; margin-bottom: 14px;
   box-shadow: 0 8px 20px rgba(245,158,11,.35);
 }
 .daily-card h3 { margin: 0 0 6px; font-size: 1.1rem; }
@@ -501,7 +506,6 @@ body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important;
 }
 .daily-btn:disabled { opacity: .6; cursor: not-allowed; }
 
-/* ============ چک‌لیست بصری ============ */
 .checklist {
   background: var(--card-2);
   border-radius: 12px;
@@ -514,16 +518,6 @@ body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important;
 .checklist li { padding: 4px 0; font-size: .9rem; display: flex; align-items: flex-start; gap: 8px; }
 .checklist li::before { content: '✓'; color: var(--success); font-weight: 800; flex-shrink: 0; }
 
-/* ============ دکمه‌ی صداگذاری ============ */
-.tts-btn {
-  width: 36px; height: 36px; border-radius: 12px;
-  background: var(--hint-bg); color: var(--primary-d);
-  display: inline-flex; align-items: center; justify-content: center;
-  font-size: 1rem; margin-right: 6px;
-  border: none; cursor: pointer;
-}
-
-/* ============ حالت debug ============ */
 .debug-panel {
   background: #1e1e2e; color: #a6e3a1;
   font-family: 'Courier New', monospace;
@@ -532,7 +526,18 @@ body.no-anim .anim-wrap.playing .anim-label-appear { animation: none !important;
   margin-top: 12px; max-height: 220px; overflow: auto;
 }
 
-/* ============ تم ============ */
+/* نمایش نسخه */
+.version-badge {
+  display: inline-block;
+  background: var(--hint-bg);
+  color: var(--hint-text);
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: .85rem;
+  font-weight: 700;
+  direction: ltr;
+}
+
 body, .card, .question-box, .lesson-section, .num-input, .choice, .pill, .bottom-nav, .top-bar {
   transition: background-color .25s ease, color .25s ease, border-color .25s ease;
 }
