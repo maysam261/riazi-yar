@@ -600,7 +600,315 @@ const Shapes = {
     );
   }
 };
+/* ═════════ ۱۱.۵) SHAPES ANIM — رسم انیمیشن‌ها ═════════ */
+const ShapesAnim = {
+  /* ─── محیط: کشیدن خط‌به‌خط ─── */
+  tracingSquare(side) {
+    const W = 240, H = 220, pad = 50;
+    const box = Math.min(W, H) - 2 * pad;
+    const x = (W - box) / 2, y = (H - box) / 2;
+    const len = Math.ceil(4 * box);
+    return svgWrap(W, H,
+      `<rect x="${x}" y="${y}" width="${box}" height="${box}" fill="${SC.fill}" fill-opacity="0.25" rx="4"/>` +
+      `<rect x="${x}" y="${y}" width="${box}" height="${box}" fill="none" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw-loop" style="--len:${len}"/>` +
+      label(x + box / 2, y + box + 24, fa(side), 'middle', 'svg-label-lg')
+    );
+  },
+  tracingRect(w, h) {
+    const W = 280, H = 220, pad = 50;
+    const wN = numOr(w, 3), hN = numOr(h, 2);
+    const s = Math.min((W - 2 * pad) / wN, (H - 2 * pad) / hN);
+    const rw = wN * s, rh = hN * s;
+    const x = (W - rw) / 2, y = (H - rh) / 2;
+    const len = Math.ceil(2 * (rw + rh));
+    return svgWrap(W, H,
+      `<rect x="${x}" y="${y}" width="${rw}" height="${rh}" fill="${SC.fill}" fill-opacity="0.25" rx="4"/>` +
+      `<rect x="${x}" y="${y}" width="${rw}" height="${rh}" fill="none" stroke="${SC.stroke}" stroke-width="4" rx="4" class="anim-draw-loop" style="--len:${len}"/>` +
+      label(x + rw / 2, y + rh + 24, fa(w), 'middle', 'svg-label-lg') +
+      label(x - 12, y + rh / 2 + 5, fa(h), 'end', 'svg-label-lg')
+    );
+  },
+  tracingTriangle(a, b, c) {
+    const W = 280, H = 240, pad = 55;
+    const v = triangleFromSides(a, b, c);
+    const pts = mathToSvg([v.A, v.B, v.C], W, H, pad);
+    const [pA, pB, pC] = pts;
+    const cent = polyCentroid(pts);
+    const lAB = Math.hypot(pB[0]-pA[0], pB[1]-pA[1]);
+    const lBC = Math.hypot(pC[0]-pB[0], pC[1]-pB[1]);
+    const lCA = Math.hypot(pA[0]-pC[0], pA[1]-pC[1]);
+    return svgWrap(W, H,
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.2"/>` +
+      `<line x1="${pA[0]}" y1="${pA[1]}" x2="${pB[0]}" y2="${pB[1]}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(lAB)}"/>` +
+      `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(lBC)};animation-delay:.6s"/>` +
+      `<line x1="${pC[0]}" y1="${pC[1]}" x2="${pA[0]}" y2="${pA[1]}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(lCA)};animation-delay:1.2s"/>` +
+      labelOnSegment(pA, pB, cent, fa(c), 18) +
+      labelOnSegment(pB, pC, cent, fa(a), 18) +
+      labelOnSegment(pC, pA, cent, fa(b), 18)
+    );
+  },
+  circlePerimeterAnim(r) {
+    const W = 240, H = 220, cx = W / 2, cy = H / 2, R = 68;
+    const circ = Math.ceil(2 * Math.PI * R);
+    return svgWrap(W, H,
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${SC.fill}" fill-opacity="0.25"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${SC.stroke}" stroke-width="5" stroke-linecap="round" class="anim-draw-loop" style="--len:${circ};transform-origin:${cx}px ${cy}px;transform:rotate(-90deg)"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:.2s"/>` +
+      `<line x1="${cx}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="${SC.accent}" stroke-width="2.5" class="anim-draw-loop" style="--len:${R};animation-delay:1.5s"/>` +
+      `<g class="anim-label-appear" style="animation-delay:2.2s">${measureLabel(cx + R / 2, cy - 8, fa(r), 'middle')}</g>`
+    );
+  },
+  circleRadiusAnim(r) {
+    const W = 240, H = 220, cx = W / 2, cy = H / 2, R = 68;
+    return svgWrap(W, H,
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="${SC.fill}" fill-opacity="0.35" class="anim-fade-loop"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${SC.stroke}" stroke-width="3.5" class="anim-fade-loop"/>` +
+      `<line x1="${cx}" y1="${cy}" x2="${cx + R}" y2="${cy}" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${R};animation-delay:.8s"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="3.5" fill="${SC.stroke}"/>` +
+      `<g class="anim-label-appear" style="animation-delay:1.6s">${measureLabel(cx + R / 2, cy - 8, fa(r), 'middle')}</g>`
+    );
+  },
+  perimeterPolygon(n, s) {
+    const W = 260, H = 240, cx = W / 2, cy = H / 2, R = 82;
+    const start = -Math.PI / 2;
+    const pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = start + i * 2 * Math.PI / n;
+      pts.push([cx + R * Math.cos(a), cy + R * Math.sin(a)]);
+    }
+    const pointsStr = pts.map(p => p.map(x => x.toFixed(1)).join(',')).join(' ');
+    let lines = '';
+    for (let i = 0; i < n; i++) {
+      const p1 = pts[i], p2 = pts[(i + 1) % n];
+      const len = Math.ceil(Math.hypot(p2[0]-p1[0], p2[1]-p1[1]));
+      lines += `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${len};animation-delay:${(i * 0.2).toFixed(2)}s"/>`;
+    }
+    return svgWrap(W, H,
+      `<polygon points="${pointsStr}" fill="${SC.fill}" fill-opacity="0.2"/>` + lines +
+      labelOnSegment(pts[0], pts[1], [cx, cy], fa(s), 18)
+    );
+  },
+  perimeterParallelogram(a, b) {
+    const W = 280, H = 220, pad = 55;
+    const aN = numOr(a, 5), bN = numOr(b, 3);
+    const pts = fitPoints([[0, 0], [aN, 0], [aN + bN * 0.35, -bN * 0.6], [bN * 0.35, -bN * 0.6]], W, H, pad);
+    const cent = polyCentroid(pts);
+    let lines = '';
+    for (let i = 0; i < 4; i++) {
+      const p1 = pts[i], p2 = pts[(i + 1) % 4];
+      const len = Math.ceil(Math.hypot(p2[0]-p1[0], p2[1]-p1[1]));
+      lines += `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${len};animation-delay:${(i*0.4).toFixed(2)}s"/>`;
+    }
+    return svgWrap(W, H,
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.2"/>` + lines +
+      labelOnSegment(pts[0], pts[1], cent, fa(a), 18) +
+      labelOnSegment(pts[1], pts[2], cent, fa(b), 18)
+    );
+  },
+  perimeterRhombus(s) {
+    const W = 260, H = 240, pad = 55;
+    const sN = numOr(s, 5);
+    const halfW = sN / 2, halfH = (sN * 0.75) / 2;
+    const pts = fitPoints([[halfW, 0], [2 * halfW, halfH], [halfW, 2 * halfH], [0, halfH]], W, H, pad);
+    const cent = polyCentroid(pts);
+    let lines = '';
+    for (let i = 0; i < 4; i++) {
+      const p1 = pts[i], p2 = pts[(i + 1) % 4];
+      const len = Math.ceil(Math.hypot(p2[0]-p1[0], p2[1]-p1[1]));
+      lines += `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${len};animation-delay:${(i*0.4).toFixed(2)}s"/>`;
+    }
+    return svgWrap(W, H,
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.2"/>` + lines +
+      labelOnSegment(pts[0], pts[1], cent, fa(s), 18)
+    );
+  },
+  perimeterTrapezoid(bigBase, smallBase, height) {
+    const W = 280, H = 240, pad = 55;
+    const bb = numOr(bigBase, 10), sb = numOr(smallBase, 6), h = numOr(height, 4);
+    const offset = (bb - sb) / 2;
+    const pts = mathToSvg([[offset, h], [offset + sb, h], [bb, 0], [0, 0]], W, H, pad);
+    const cent = polyCentroid(pts);
+    let lines = '';
+    for (let i = 0; i < 4; i++) {
+      const p1 = pts[i], p2 = pts[(i + 1) % 4];
+      const len = Math.ceil(Math.hypot(p2[0]-p1[0], p2[1]-p1[1]));
+      lines += `<line x1="${p1[0].toFixed(1)}" y1="${p1[1].toFixed(1)}" x2="${p2[0].toFixed(1)}" y2="${p2[1].toFixed(1)}" stroke="${SC.stroke}" stroke-width="4" stroke-linecap="round" class="anim-draw-loop" style="--len:${len};animation-delay:${(i*0.4).toFixed(2)}s"/>`;
+    }
+    return svgWrap(W, H,
+      `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" fill-opacity="0.2"/>` + lines +
+      labelOnSegment(pts[0], pts[1], cent, fa(smallBase), 22) +
+      labelOnSegment(pts[3], pts[2], cent, fa(bigBase), 22)
+    );
+  },
 
+  /* ─── مساحت ─── */
+  areaSquare(side) { return areaStageGeneric({ shape: 'square', W: 240, H: 220, data: { side: numOr(side, 3) }, baseLabel: fa(side) + ' سانتی‌متر' }); },
+  areaRectangle(w, h) { return areaStageGeneric({ shape: 'rect', W: 280, H: 220, data: { w: numOr(w, 3), h: numOr(h, 2) } }); },
+  areaTriangle(base, height) { return areaStageGeneric({ shape: 'tri', W: 280, H: 240, data: { base: numOr(base, 4), height: numOr(height, 3) }, heightLabel: fa(height), baseLabel: fa(base) }); },
+  areaCircle(r) { return areaStageGeneric({ shape: 'circle', W: 260, H: 240, data: { r: numOr(r, 3) }, baseLabel: fa(r) }); },
+  areaParallelogram(base, height) { return areaStageGeneric({ shape: 'para', W: 280, H: 240, data: { base: numOr(base, 5), height: numOr(height, 3) }, baseLabel: fa(base), heightLabel: fa(height) }); },
+  areaRhombus(d1, d2) { return areaStageGeneric({ shape: 'rhom', W: 280, H: 240, data: { d1: numOr(d1, 6), d2: numOr(d2, 4) }, baseLabel: fa(d2), heightLabel: fa(d1) }); },
+  areaTrapezoid(bigBase, smallBase, height) { return areaStageGeneric({ shape: 'trap', W: 280, H: 240, data: { bigBase: numOr(bigBase, 8), smallBase: numOr(smallBase, 5), height: numOr(height, 3) }, heightLabel: fa(height) }); },
+
+  /* ✅ مثلث قائم‌الزاویه — ارتفاع و قاعده دو ضلع قائمه */
+  areaRightTriangle(aLeg, bLeg) {
+    const W = 280, H = 240, pad = 55;
+    const aN = numOr(aLeg, 4), bN = numOr(bLeg, 3);
+    const A = [0, bN], B = [0, 0], C = [aN, 0];
+    const pts = mathToSvg([A, B, C], W, H, pad);
+    const [pA, pB, pC] = pts;
+    const fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
+    const heightLine = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${pB[0]}" y2="${pB[1]}" stroke="${SC.accent}" stroke-width="3" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-pB[1])};animation-delay:0.5s"/>`;
+    const baseLine = `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.abs(pC[0]-pB[0])};animation-delay:1.5s"/>`;
+    const rightAngle = angleMarkInside(pB[0], pB[1], 1, -1, 12, 2.2);
+    return svgWrap(W, H, fill + heightLine + baseLine + rightAngle +
+      `<g class="anim-label-appear" style="animation-delay:1.4s">${measureLabel(pA[0] - 12, (pA[1] + pB[1]) / 2 + 4, fa(bN), 'end')}</g>` +
+      `<g class="anim-label-appear" style="animation-delay:2.4s">${label((pB[0] + pC[0]) / 2, pB[1] + 24, fa(aN), 'middle', 'svg-label-lg')}</g>`
+    );
+  },
+  /* ✅ مثلث متساوی‌الساقین */
+  areaIsoscelesTriangle(base, height) {
+    return areaStageGeneric({
+      shape: 'tri', W: 280, H: 240,
+      data: { base: numOr(base, 4), height: numOr(height, 3) },
+      heightLabel: fa(height), baseLabel: fa(base)
+    });
+  },
+  /* ✅ مثلث مختلف‌الاضلاع */
+  areaScaleneTriangle(a, b, c) {
+    const W = 280, H = 240, pad = 55;
+    const v = triangleFromSides(a, b, c);
+    const pts = mathToSvg([v.A, v.B, v.C], W, H, pad);
+    const [pA, pB, pC] = pts;
+    const cent = polyCentroid(pts);
+    const fill = `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill2}" class="anim-pulse-loop"/>`;
+    const midBC = [(pB[0] + pC[0]) / 2, (pB[1] + pC[1]) / 2];
+    const heightLine = `<line x1="${pA[0]}" y1="${pA[1]}" x2="${midBC[0]}" y2="${midBC[1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4" class="anim-draw-loop" style="--len:${Math.abs(pA[1]-midBC[1])};animation-delay:0.5s"/>`;
+    const baseLine = `<line x1="${pB[0]}" y1="${pB[1]}" x2="${pC[0]}" y2="${pC[1]}" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(Math.hypot(pC[0]-pB[0], pC[1]-pB[1]))};animation-delay:1.5s"/>`;
+    const rightAngle = angleMarkInside(midBC[0], midBC[1], 1, -1, 11, 2.2);
+    return svgWrap(W, H, fill + heightLine + baseLine + rightAngle +
+      labelOnSegment(pA, pB, cent, fa(c), 18) +
+      labelOnSegment(pB, pC, cent, fa(a), 18) +
+      labelOnSegment(pC, pA, cent, fa(b), 18)
+    );
+  },
+
+  /* ─── مربع‌های واحد ─── */
+  unitSquaresRect(w, h) { return unitSquaresAnim(w, h); },
+  unitSquaresSquare(s) { return unitSquaresAnim(s, s); },
+  gridRect(w, h) { return unitSquaresAnim(w, h); },
+  gridSquare(s) { return unitSquaresAnim(s, s); },
+  triangleAreaAnim(base, height) { return ShapesAnim.areaTriangle(base, height); },
+
+  /* ─── حجم: مکعب‌های ۱×۱ ─── */
+  cubeBuild(edge) {
+    const n = Math.min(6, Math.max(2, Math.round(numOr(edge, 3))));
+    return cubeUnitBuild(n);
+  },
+  boxBuild(length, width, height) {
+    const L = Math.min(6, Math.max(2, Math.round(numOr(length, 3))));
+    const Wd = Math.min(6, Math.max(2, Math.round(numOr(width, 2))));
+    const Hh = Math.min(6, Math.max(2, Math.round(numOr(height, 3))));
+    return boxUnitBuild(L, Wd, Hh);
+  },
+
+  /* ─── کسرها ─── */
+  fracPieAnim(n, d) {
+    const W = 160, H = 160, cx = 80, cy = 80, r = 60;
+    let paths = '';
+    for (let i = 0; i < d; i++) {
+      const a1 = (i / d) * 2 * Math.PI - Math.PI / 2;
+      const a2 = ((i + 1) / d) * 2 * Math.PI - Math.PI / 2;
+      const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+      const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+      const large = (a2 - a1) > Math.PI ? 1 : 0;
+      const fill = i < n ? SC.fill2 : SC.blank;
+      const delay = (i * 0.15).toFixed(2);
+      if (d === 1) paths += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" stroke="${SC.stroke}" stroke-width="2" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
+      else paths += `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} Z" fill="${fill}" stroke="${SC.stroke}" stroke-width="1.5" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
+    }
+    return svgWrap(W, H, paths);
+  },
+  fracBarAnim(n, d) {
+    const W = 300, H = 120, pad = 20, barW = W - 2 * pad, segW = barW / d;
+    const y = 15, h = 35;
+    let rects = '';
+    for (let i = 0; i < d; i++) {
+      const fill = i < n ? SC.fill2 : SC.blank;
+      const delay = (i * 0.12).toFixed(2);
+      rects += `<rect x="${(pad + i * segW).toFixed(1)}" y="${y}" width="${segW.toFixed(1)}" height="${h}" fill="${fill}" stroke="${SC.stroke}" stroke-width="1.5" class="anim-pop-loop" style="animation-delay:${delay}s"/>`;
+    }
+    const cx = W / 2, fy = y + h + 22;
+    const fracSvg =
+      `<text x="${cx}" y="${fy}" text-anchor="middle" class="svg-label-lg" style="font-weight:700" direction="rtl">${fa(n)}</text>` +
+      `<line x1="${cx - 12}" y1="${fy + 5}" x2="${cx + 12}" y2="${fy + 5}" stroke="${SC.stroke}" stroke-width="2"/>` +
+      `<text x="${cx}" y="${fy + 24}" text-anchor="middle" class="svg-label-lg" style="font-weight:700" direction="rtl">${fa(d)}</text>`;
+    return svgWrap(W, H, rects + fracSvg);
+  },
+  fracCompareBars(n1, d1, n2, d2) {
+    return `<div style="display:flex;flex-direction:column;gap:8px;align-items:center">` +
+      ShapesAnim.fracBarAnim(n1, d1) + ShapesAnim.fracBarAnim(n2, d2) + `</div>`;
+  },
+
+  /* ─── اعشار ─── */
+  numberLineAnim(from, to, value) {
+    const W = 340, H = 90, pad = 30, y = 48;
+    const step = (W - 2 * pad) / (to - from);
+    let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
+    for (let i = from; i <= to; i++) {
+      const x = pad + (i - from) * step;
+      line += `<line x1="${x}" y1="${y - 6}" x2="${x}" y2="${y + 6}" stroke="${SC.stroke}" stroke-width="2"/>`;
+      line += `<text x="${x}" y="${y + 26}" text-anchor="middle" class="svg-label" direction="rtl">${fa(i)}</text>`;
+    }
+    const mx = pad + (value - from) * step;
+    line += `<circle cx="${mx}" cy="${y}" r="8" fill="${SC.accent}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:.5s"/>`;
+    return svgWrap(W, H, line);
+  },
+  decimalLine(marks, highlight, from, to) {
+    const W = 360, H = 110, pad = 30, y = 55;
+    const range = to - from, step = (W - 2 * pad) / range;
+    let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
+    for (let i = 0; i <= range * 10; i++) {
+      const v = from + i / 10, x = pad + (v - from) * step;
+      const isMain = i % 10 === 0, isHalf = i % 5 === 0 && !isMain;
+      const len = isMain ? 8 : (isHalf ? 5 : 3);
+      line += `<line x1="${x}" y1="${y - len}" x2="${x}" y2="${y + len}" stroke="${SC.stroke}" stroke-width="${isMain ? 2 : 1}"/>`;
+      if (isMain) line += `<text x="${x}" y="${y + 28}" text-anchor="middle" class="svg-label" direction="rtl">${faDec(i / 10, 1)}</text>`;
+    }
+    if (highlight != null) {
+      const hx = pad + (highlight - from) * step;
+      line += `<circle cx="${hx}" cy="${y}" r="9" fill="${SC.accent}" stroke="var(--card)" stroke-width="2" class="anim-pop-loop" style="animation-delay:.5s"/>`;
+      line += `<line x1="${hx}" y1="${y - 22}" x2="${hx}" y2="${y - 9}" stroke="${SC.accent}" stroke-width="2.5" stroke-linecap="round" class="anim-draw-loop" style="--len:13;animation-delay:.3s"/>`;
+    }
+    return svgWrap(W, H, line);
+  },
+  /* ✅ محور جمع اعشار — قوس یکپارچه از صفر به a، سپس به a+b */
+  decimalAddOnLine(from, to, a, b) {
+    const W = 400, H = 150, pad = 30, y = 90;
+    const range = to - from, step = (W - 2 * pad) / range;
+    let line = `<line x1="${pad}" y1="${y}" x2="${W - pad}" y2="${y}" stroke="${SC.stroke}" stroke-width="2.5"/>`;
+    for (let i = 0; i <= range * 10; i++) {
+      const v = from + i / 10, x = pad + (v - from) * step;
+      const isMain = i % 10 === 0, len = isMain ? 8 : 4;
+      line += `<line x1="${x}" y1="${y - len}" x2="${x}" y2="${y + len}" stroke="${SC.stroke}" stroke-width="${isMain ? 2 : 1}"/>`;
+      if (isMain) line += `<text x="${x}" y="${y + 28}" text-anchor="middle" class="svg-label" direction="rtl">${faDec(i / 10, 1)}</text>`;
+    }
+    const x0 = pad;
+    const ax = pad + (a - from) * step;
+    const bx = pad + (a + b - from) * step;
+    const arcTopY = y - 55;
+    /* قوس اول: ۰ → a */
+    line += `<path d="M ${x0} ${y - 8} Q ${(x0 + ax) / 2} ${arcTopY} ${ax} ${y - 8}" fill="none" stroke="${SC.accent}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(Math.hypot((ax-x0)/2, arcTopY - y))};animation-delay:0s"/>`;
+    line += `<polygon points="${ax},${y - 8} ${ax - 5},${y - 20} ${ax + 7},${y - 15}" fill="${SC.accent}" class="anim-fade-loop" style="animation-delay:0.7s"/>`;
+    line += `<text x="${(x0 + ax) / 2}" y="${arcTopY - 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.accent}" direction="rtl">${faDec(a, 1)}</text>`;
+    const arc2TopY = y - 30;
+    /* قوس دوم: a → a+b */
+    line += `<path d="M ${ax} ${y - 8} Q ${(ax + bx) / 2} ${arc2TopY} ${bx} ${y - 8}" fill="none" stroke="${SC.stroke}" stroke-width="3" stroke-linecap="round" class="anim-draw-loop" style="--len:${Math.ceil(Math.hypot((bx-ax)/2, arc2TopY - y))};animation-delay:0.8s"/>`;
+    line += `<polygon points="${bx},${y - 8} ${bx - 5},${y - 20} ${bx + 7},${y - 15}" fill="${SC.stroke}" class="anim-fade-loop" style="animation-delay:1.5s"/>`;
+    line += `<text x="${(ax + bx) / 2}" y="${arc2TopY - 4}" text-anchor="middle" class="svg-label-lg" style="font-weight:800;fill:${SC.stroke}" direction="rtl">${faDec(b, 1)}</text>`;
+    line += `<circle cx="${x0}" cy="${y}" r="7" fill="${SC.fill2}" stroke="${SC.stroke}" stroke-width="2.5" class="anim-pop-loop"/>`;
+    line += `<text x="${x0}" y="${y + 30}" text-anchor="middle" class="svg-label" direction="rtl">۰</text>`;
+    line += `<circle cx="${ax}" cy="${y}" r="7" fill="${SC.accent}" stroke="${SC.stroke}" strok
 /* ═════════ ۱۲) COMPOSITES — اشکال ناهمگون ═════════ */
 /* هر ترکیب: گرید دوبعدی. هر خانه فعال = ۱ واحد مربع */
 /* مساحت = تعداد خانه‌ها × ۱ */
