@@ -38,12 +38,14 @@
   --shape-fill-4: #bbf7d0;
   --shape-stroke: #ea580c;
   --shape-accent: #7c3aed;
+  --shape-accent-2: #0891b2;
   --shape-grid: #cbd5e1;
   --shape-blank: #e5e7eb;
   --shape-angle: #f59e0b;
   --shape-unit: #93c5fd;
   --shape-unit-half: #bfdbfe;
   --shape-dashed: #9ca3af;
+  --shape-ghost: rgba(124, 58, 237, 0.08);
 
   --hint-bg: rgba(124,58,237,.10);
   --hint-text: #5b21b6;
@@ -79,12 +81,14 @@
   --shape-fill-4: #15803d;
   --shape-stroke: #fb923c;
   --shape-accent: #c4b5fd;
+  --shape-accent-2: #67e8f9;
   --shape-grid: #4b5563;
   --shape-blank: #374151;
   --shape-angle: #fbbf24;
   --shape-unit: #3b82f6;
   --shape-unit-half: #1d4ed8;
   --shape-dashed: #6b7280;
+  --shape-ghost: rgba(167, 139, 250, 0.10);
 
   --hint-bg: rgba(167,139,250,.15);
   --hint-text: #c4b5fd;
@@ -203,6 +207,7 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .svg-label { font-family: Vazirmatn; font-size: 12px; fill: var(--shape-stroke); font-weight: 600; }
 .svg-label-lg { font-family: Vazirmatn; font-size: 14px; fill: var(--shape-stroke); font-weight: 700; }
 .svg-label-measure { font-family: Vazirmatn; font-size: 13px; fill: var(--shape-accent); font-weight: 700; }
+.svg-label-measure-2 { font-family: Vazirmatn; font-size: 13px; fill: var(--shape-accent-2); font-weight: 700; }
 .svg-label-angle { font-family: Vazirmatn; font-size: 11px; fill: var(--shape-angle); font-weight: 700; }
 
 /* ============ پاسخ ============ */
@@ -274,14 +279,16 @@ select.num-input {
 @keyframes bounce { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-8px);} }
 @keyframes drawStrokeAnim { from { stroke-dashoffset: var(--len, 500); } to { stroke-dashoffset: 0; } }
 @keyframes fadeInAnim { from { opacity: 0; } to { opacity: 1; } }
-@keyframes popInAnim { 0% { opacity:0; transform:scale(.4); } 60% { opacity:1; transform:scale(1.1); } 100% { opacity:1; transform:scale(1); } }
-@keyframes slideDownAnim { from { opacity:0; transform:translateY(-15px); } to { opacity:1; transform:translateY(0); } }
+@keyframes popInAnim { 0% { opacity: 0; transform: scale(.4); } 60% { opacity: 1; transform: scale(1.1); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes slideDownAnim { from { opacity: 0; transform: translateY(-15px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes pulseFillAnim { 0%,100% { opacity: .35; } 50% { opacity: .75; } }
-@keyframes labelAppearAnim { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes labelAppearAnim { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ghostToFullAnim { from { opacity: .25; } to { opacity: 1; } }
 
+/* ✅ اشکال از ابتدا کم‌رنگ دیده می‌شوند (نه مخفی) */
 .anim-draw-loop { stroke-dasharray: var(--len, 500); stroke-dashoffset: var(--len, 500); }
 .anim-fade-loop { opacity: 0; }
-.anim-pop-loop  { opacity: 0; transform-box: fill-box; transform-origin: center; }
+.anim-pop-loop  { opacity: .28; transform-box: fill-box; transform-origin: center; }
 .anim-slide-loop { opacity: 0; }
 .anim-label-appear { opacity: 0; }
 .anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out infinite; }
@@ -289,9 +296,9 @@ select.num-input {
 .anim-wrap.playing .anim-draw-loop { animation: drawStrokeAnim 2.2s ease-out both; }
 .anim-wrap.playing .anim-fade-loop { animation: fadeInAnim 1.2s ease both; }
 .anim-wrap.playing .anim-pop-loop  { animation: popInAnim 1.4s cubic-bezier(.34,1.56,.64,1) both; }
-.anim-wrap.playing .anim-slide-loop{ animation: slideDownAnim 1.2s cubic-bezier(.34,1.56,.64,1) both; }
+.anim-wrap.playing .anim-slide-loop { animation: slideDownAnim 1.2s cubic-bezier(.34,1.56,.64,1) both; }
 .anim-wrap.playing .anim-label-appear { animation: labelAppearAnim .6s ease both; }
-.anim-wrap.playing .anim-pulse-loop{ animation: pulseFillAnim 1.6s ease-in-out 2; }
+.anim-wrap.playing .anim-pulse-loop { animation: pulseFillAnim 1.6s ease-in-out 2; }
 
 body.no-anim .anim-draw-loop,
 body.no-anim .anim-fade-loop,
@@ -433,6 +440,16 @@ html { scroll-behavior: smooth; }
 .lesson-nav { display: flex; gap: 10px; margin-top: 16px; }
 .lesson-nav .btn { flex: 1; }
 
+/* ============ بخش تمرین درسنامه ============ */
+.practice-in-lesson {
+  background: var(--card-2);
+  border: 2px solid var(--primary-l);
+  border-radius: var(--radius);
+  padding: 14px;
+  margin-top: 14px;
+}
+.practice-in-lesson h4 { margin: 0 0 10px; color: var(--primary-d); font-size: 1rem; display: flex; align-items: center; gap: 6px; }
+
 /* ============ واحد اندازه‌گیری ============ */
 .units-card {
   background: linear-gradient(135deg, var(--hint-bg), var(--card-2));
@@ -458,6 +475,20 @@ html { scroll-behavior: smooth; }
 .proof-card p { margin: 0 0 10px; line-height: 2; }
 .proof-card .conclusion { background: var(--card); padding: 12px; border-radius: 12px; margin-top: 10px; font-weight: 700; border-right: 4px solid var(--success); direction: ltr; unicode-bidi: isolate; }
 
+/* ============ کارت مقایسه محیط/مساحت ============ */
+.compare-card {
+  background: linear-gradient(135deg, var(--card), var(--card-2));
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 14px;
+  border: 2px solid var(--primary-l);
+}
+.compare-card h3 { margin: 0 0 12px; color: var(--primary-d); font-size: 1.05rem; display: flex; align-items: center; gap: 8px; }
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.compare-item { background: var(--card); padding: 12px; border-radius: 12px; text-align: center; border: 1px solid var(--border); }
+.compare-item .label { font-size: .82rem; color: var(--muted); margin-bottom: 4px; }
+.compare-item .val { font-size: 1.15rem; font-weight: 800; direction: ltr; }
+
 /* ============ انیمیشن با کلیک ============ */
 .anim-wrap {
   cursor: pointer; border-radius: 14px;
@@ -478,6 +509,19 @@ html { scroll-behavior: smooth; }
   display: inline-flex; align-items: center; gap: 6px;
 }
 .anim-hint-wrap { text-align: center; margin-top: 4px; }
+
+/* ============ حالت کاوش ============ */
+.explore-wrap { text-align: center; margin: 12px 0; }
+.explore-grid { display: inline-grid; gap: 2px; padding: 10px; background: var(--card-2); border-radius: 14px; border: 2px dashed var(--primary-l); }
+.explore-cell {
+  width: 24px; height: 24px; border-radius: 4px;
+  background: var(--shape-blank);
+  border: 1px solid var(--border);
+  cursor: pointer; transition: all .18s ease;
+}
+.explore-cell.filled { background: var(--shape-blank); }
+.explore-cell.active { background: var(--shape-fill-2); transform: scale(1.1); }
+.explore-counter { margin-top: 10px; font-weight: 700; color: var(--primary-d); }
 
 .hint-progressive {
   background: var(--hint-bg);
