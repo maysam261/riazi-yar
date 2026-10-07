@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE_VERSION = 'riazi-yar-v23';
+const CACHE_VERSION = 'riazi-yar-v24';
 
 const APP_SHELL = [
   './', './index.html', './style.css', './script.js', './manifest.json',
@@ -11,38 +11,60 @@ const APP_SHELL = [
   './fonts/webfonts/Vazirmatn-Bold.woff2'
 ];
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', function(event) {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then(cache => Promise.all(APP_SHELL.map(url =>
-        cache.add(url).catch(err => console.warn('کش نشد:', url, err))
-      )))
-      .then(() => self.skipWaiting())
+      .then(function(cache) {
+        return Promise.all(APP_SHELL.map(function(url) {
+          return cache.add(url).catch(function(err) { console.warn('کش نشد:', url, err); });
+        }));
+      })
+      .then(function() { return self.skipWaiting(); })
   );
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE_VERSION).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())
+      .then(function(keys) {
+        return Promise.all(keys.filter(function(k) { return k !== CACHE_VERSION; }).map(function(k) { return caches.delete(k); }));
+      })
+      .then(function() { return self.clients.claim(); })
   );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', function(event) {
   const req = event.request;
   if (req.method !== 'GET') return;
   let url;
-  try { url = new URL(req.url); } catch { return; }
+  try { url = new URL(req.url); } catch (e) { return; }
   if (url.origin !== self.location.origin) return;
 
   if (req.mode === 'navigate') {
-    event.respondWith(fetch(req).catch(() =>
-      caches.match('./index.html').then(r => r || offlineResp())
-    ));
+    event.respondWith(fetch(req).catch(function() {
+      return caches.match('./index.html').then(function(r) { return r || offlineResp(); });
+    }));
     return;
   }
-  event.respondWith(caches.match(req).then(cached => cached || fetchAndCache(req)));
+
+  // ✅ Network-first برای فایل‌های اصلی
+  if (url.pathname.endsWith('/script.js') || url.pathname.endsWith('/style.css') || url.pathname.endsWith('/index.html') || url.pathname.endsWith('/')) {
+    event.respondWith(
+      fetch(req).then(function(res) {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_VERSION).then(function(cache) { cache.put(req, copy); }).catch(function() {});
+        }
+        return res;
+      }).catch(function() {
+        return caches.match(req).then(function(c) { return c || offlineResp(); });
+      })
+    );
+    return;
+  }
+
+  // Cache-first برای بقیه
+  event.respondWith(caches.match(req).then(function(cached) { return cached || fetchAndCache(req); }));
 });
 
 async function fetchAndCache(req) {
@@ -50,15 +72,10 @@ async function fetchAndCache(req) {
     const res = await fetch(req);
     if (res && res.status === 200) {
       const copy = res.clone();
-      caches.open(CACHE_VERSION).then(cache => cache.put(req, copy)).catch(() => {});
+      caches.open(CACHE_VERSION).then(function(cache) { cache.put(req, copy); }).catch(function() {});
     }
     return res;
-  } catch {
-    const accept = req.headers.get('accept') || '';
-    if (accept.includes('text/html')) {
-      const fb = await caches.match('./index.html');
-      if (fb) return fb;
-    }
+  } catch (e) {
     return offlineResp();
   }
 }
@@ -70,10 +87,10 @@ function offlineResp() {
   });
 }
 
-self.addEventListener('message', (event) => {
+self.addEventListener('message', function(event) {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
   if (event.data === 'CLEAR_CACHE') {
-    caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))))
-      .then(() => event.source && event.source.postMessage({ type: 'CACHE_CLEARED' }));
+    caches.keys().then(function(keys) { return Promise.all(keys.map(function(k) { return caches.delete(k); })); })
+      .then(function() { if (event.source) event.source.postMessage({ type: 'CACHE_CLEARED' }); });
   }
 });
