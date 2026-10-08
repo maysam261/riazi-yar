@@ -265,13 +265,29 @@ function label(x, y, txt, anchor = 'middle', cls = 'svg-label') {
 function measureLabel(x, y, txt, anchor = 'middle', cls = 'svg-label-measure') {
   return `<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}" direction="rtl">${txt}</text>`;
 }
-function angleMarkInside(cornerX, cornerY, dx, dy, size = 12, delay = 0) {
-  const sx = Math.sign(dx) * size;
-  const sy = Math.sign(dy) * size;
+function smartText(text) {
+  const html = String(text);
+  if (/<[^>]+>/.test(html)) return html;
+  const numericChars = (html.match(/[\d۰-۹+\-−×÷=٫.()\[\]]/g) || []).length;
+  const letterChars = (html.match(/[آ-یءأإؤئa-zA-Z]/g) || []).length;
+  if (numericChars > letterChars && numericChars >= 3) {
+    return '<span dir="ltr" class="math-ltr">' + html + '</span>';
+  }
+  return html;
+}
+function angleMarkInside(cornerX, cornerY, dx, dy, size, delay) {
+  size = size || 12;
+  delay = delay || 0;
+  let ux = dx, uy = dy;
+  if (ux === 0 && uy === 0) { ux = 1; uy = 1; }
+  else if (ux === 0) { ux = uy > 0 ? 1 : -1; }
+  else if (uy === 0) { uy = ux > 0 ? 1 : -1; }
+  const sx = Math.sign(ux) * size;
+  const sy = Math.sign(uy) * size;
   const p1x = cornerX + sx, p1y = cornerY;
   const p2x = cornerX + sx, p2y = cornerY + sy;
   const p3x = cornerX,       p3y = cornerY + sy;
-  return `<polyline points="${p1x},${p1y} ${p2x},${p2y} ${p3x},${p3y}" fill="none" stroke="${SC.angle}" stroke-width="2" class="anim-fade-loop" style="animation-delay:${delay}s"/>`;
+  return '<polyline points="' + p1x + ',' + p1y + ' ' + p2x + ',' + p2y + ' ' + p3x + ',' + p3y + '" fill="none" stroke="' + SC.angle + '" stroke-width="2" class="anim-fade-loop" style="animation-delay:' + delay + 's"/>';
 }
 function fitPoints(points, W, H, pad) {
   const xs = points.map(p => p[0]), ys = points.map(p => p[1]);
@@ -412,11 +428,17 @@ const Shapes = {
     const cent = polyCentroid(pts);
     let heightLine = '';
     if (showH) {
-      const xTop = (pts[3][0] + pts[2][0]) / 2;
-      heightLine = `<line x1="${xTop}" y1="${pts[2][1]}" x2="${xTop}" y2="${pts[1][1]}" stroke="${SC.accent}" stroke-width="2.5" stroke-dasharray="6 4"/>` +
-        angleMarkInside(xTop, pts[1][1], 1, -1, 11, 0) +
-        measureLabel(xTop + 12, (pts[2][1] + pts[1][1]) / 2 + 4, fa(h), 'start');
-    }
+  const xTop = (pts[3][0] + pts[2][0]) / 2;
+  const leftX = Math.min(pts[2][0], pts[3][0]);
+  const rightX = Math.max(pts[2][0], pts[3][0]);
+  const distLeft = xTop - leftX;
+  const distRight = rightX - xTop;
+  const angleSize = Math.min(11, Math.max(5, Math.min(distLeft, distRight) * 0.65));
+  const insideDirX = distRight >= distLeft ? 1 : -1;
+  heightLine = '<line x1="' + xTop + '" y1="' + pts[2][1] + '" x2="' + xTop + '" y2="' + pts[1][1] + '" stroke="' + SC.accent + '" stroke-width="2.5" stroke-dasharray="6 4"/>' +
+    angleMarkInside(xTop, pts[2][1], insideDirX, -1, angleSize, 0) +
+    measureLabel(xTop + 12, (pts[2][1] + pts[1][1]) / 2 + 4, fa(h), 'start');
+}
     return svgWrap(W, H,
       `<polygon points="${pts.map(p => p.join(',')).join(' ')}" fill="${SC.fill}" stroke="${SC.stroke}" stroke-width="3.5" stroke-linejoin="round"/>` +
       heightLine +
@@ -3055,7 +3077,7 @@ function viewLesson(topic, id) {
         (ex.text ? '<p>' + ex.text + '</p>' : '') +
         wrapAnim(ex.shape, { hint: hint }) +
         wrapAnim(ex.html, { wrapClass: '', wrapStyle: 'text-align:center;padding:8px', hint: hint }) +
-        '<ul class="example-steps">' + ex.steps.map(function(s) { return '<li>' + s + '</li>'; }).join('') + '</ul>' +
+      '<ul class="example-steps">' + ex.steps.map(function(s) { return '<li>' + smartText(s) + '</li>'; }).join('') + '</ul>' +
         '<div class="example-answer">✅ ' + ex.answer + '</div>' +
         '</div>';
     }).join('') +
@@ -3192,7 +3214,7 @@ function finishQuestion(correct) {
       '<h4>' + title + '</h4>' +
       (!correct ? '<p>پاسخ درست: <strong class="correct-text">' + correctDisp + '</strong></p>' : '') +
       '<strong>راه‌حل:</strong>' +
-      '<ul class="steps">' + q.steps.map(function(s) { return '<li>' + s + '</li>'; }).join('') + '</ul>' +
+      '<ul class="steps">' + q.steps.map(function(s) { return '<li>' + smartText(s) + '</li>'; }).join('') + '</ul>' +
       '</div>' + hintBlock;
   }
   if (session.mode === 'daily') completeDailyChallenge(correct);
@@ -3437,7 +3459,7 @@ function viewExamResult() {
         '<div>پاسخ درست: <span class="correct-text">' + correctDisp + '</span></div>' +
         '</div>' +
         '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:.9rem;color:var(--primary);font-weight:600">📝 راه‌حل</summary>' +
-        '<ul class="steps">' + a.q.steps.map(function(s) { return '<li>' + s + '</li>'; }).join('') + '</ul>' +
+        '<ul class="steps">' + a.q.steps.map(function(s) { return '<li>' + smartText(s) + '</li>'; }).join('') + '</ul>' +
         '</details></div>';
     }).join('') +
     '</div>' +
